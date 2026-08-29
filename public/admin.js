@@ -327,7 +327,14 @@ async function loadQr() {
   try {
     const qr = await api('/api/admin/join-qr');
     $('qr').src = qr.dataUrl;
-    $('join-url').innerHTML = `${esc(qr.url)}<br />Адреса ноутбука: ${qr.addresses.map(esc).join(', ') || 'нет сети'}`;
+    // Адаптеров у ноутбука обычно несколько, а QR ведёт только на один адрес.
+    // Подписываем каждый адрес адаптером: иначе не понять, какая это сеть.
+    const lines = (qr.interfaces ?? []).map((i) => `${esc(i.address)} — ${esc(i.name)}`);
+    const warning =
+      lines.length > 1 ? '<br />QR ведёт на первый адрес. Телефоны должны быть в той же сети.' : '';
+    $('join-url').innerHTML = `${esc(qr.url)}<br />Адреса ноутбука:<br />${
+      lines.join('<br />') || 'нет сети'
+    }${warning}`;
   } catch {}
 }
 

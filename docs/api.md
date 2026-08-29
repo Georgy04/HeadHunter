@@ -187,8 +187,10 @@ hintsLeft, state }`.
 
 ### GET /api/admin/join-qr
 
-`{ url, dataUrl, addresses, port }` — QR для входа игроков и все адреса ноутбука
-в локальной сети.
+`{ url, dataUrl, addresses, interfaces, port }` — QR для входа игроков и все адреса
+ноутбука в локальной сети. `interfaces` — те же адреса, но с именем адаптера и
+подсетью (`{ name, address, subnet }`): по самому адресу не понять, в какую сеть он
+ведёт.
 
 ### GET /print
 

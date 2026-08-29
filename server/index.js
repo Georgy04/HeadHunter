@@ -56,12 +56,42 @@ function addressRank(ip) {
   return 3;
 }
 
+function subnetOf(address, netmask) {
+  const ip = address.split('.').map(Number);
+  const mask = String(netmask ?? '').split('.').map(Number);
+  if (ip.length !== 4 || mask.length !== 4) return null;
+  if ([...ip, ...mask].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  const bits = mask.reduce((total, octet) => total + octet.toString(2).replaceAll('0', '').length, 0);
+  return `${ip.map((octet, idx) => octet & mask[idx]).join('.')}/${bits}`;
+}
+
+// Адрес сам по себе не говорит, в какую сеть он ведёт: 192.168.0.13 и
+// 192.168.0.100 могут оказаться двумя разными роутерами. Поэтому рядом с
+// адресом носим имя адаптера и подсеть.
+function lanInterfaces() {
+  return Object.entries(os.networkInterfaces())
+    .flatMap(([name, list]) => (list ?? []).map((info) => ({ ...info, name })))
+    .filter((i) => i.family === 'IPv4' && !i.internal)
+    .map(({ name, address, netmask }) => ({ name, address, subnet: subnetOf(address, netmask) }))
+    .sort((a, b) => addressRank(a.address) - addressRank(b.address));
+}
+
 function lanAddresses() {
-  return Object.values(os.networkInterfaces())
-    .flat()
-    .filter((i) => i && i.family === 'IPv4' && !i.internal)
-    .map((i) => i.address)
-    .sort((a, b) => addressRank(a) - addressRank(b));
+  return lanInterfaces().map((i) => i.address);
+}
+
+// Два адаптера в одной подсети — это почти всегда два разных роутера с
+// одинаковым диапазоном (кабель в один, Wi-Fi в другой). Телефон достучится
+// только до одного из адресов, и по виду адреса не угадать, до какого.
+function subnetClashes(interfaces) {
+  const bySubnet = new Map();
+  for (const i of interfaces) {
+    if (!i.subnet) continue;
+    bySubnet.set(i.subnet, [...(bySubnet.get(i.subnet) ?? []), i.name]);
+  }
+  return [...bySubnet]
+    .filter(([, names]) => names.length > 1)
+    .map(([subnet, names]) => `${names.join(' + ')} — ${subnet}`);
 }
 
 const baseUrl = (req) => `${req.protocol}://${req.get('host')}`;
@@ -330,6 +360,7 @@ app.get(
       url,
       dataUrl: await QRCode.toDataURL(url, { margin: 1, width: 320 }),
       addresses: lanAddresses(),
+      interfaces: lanInterfaces(),
       port: PORT,
     });
   })
@@ -392,17 +423,28 @@ function escapeHtml(text) {
 app.use((req, res) => res.status(404).json({ error: 'Не найдено' }));
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
-  const addresses = lanAddresses();
-  const primary = addresses[0] ?? 'localhost';
+  const interfaces = lanInterfaces();
+  const primary = interfaces[0]?.address ?? 'localhost';
   const url = `http://${primary}:${PORT}`;
 
   console.log('');
   console.log('  HeadHunter server is running');
   console.log('  --------------------------------------------');
-  addresses.forEach((ip) => console.log(`  players : http://${ip}:${PORT}`));
+  interfaces.forEach((i) => console.log(`  players : http://${i.address}:${PORT}   [${i.name}]`));
   console.log(`  admin   : ${url}/admin?token=${state.adminToken}`);
   console.log(`  badges  : ${url}/print?token=${state.adminToken}`);
   console.log('  --------------------------------------------');
+  if (interfaces.length > 1) {
+    console.log(`  Links and the QR below use the first address: ${primary} [${interfaces[0].name}].`);
+    console.log('  Phones must be in that same network, otherwise take the matching line above.');
+    for (const clash of subnetClashes(interfaces)) {
+      console.log('  --------------------------------------------');
+      console.log(`  WARNING: two adapters share one address range: ${clash}`);
+      console.log('  Those are two different networks that look alike, and phones see only one.');
+      console.log('  Disconnect one of them and restart the server.');
+    }
+    console.log('  --------------------------------------------');
+  }
   if (process.platform === 'win32') {
     console.log('  If phones cannot connect, allow the port through the firewall (run as admin):');
     console.log(`  netsh advfirewall firewall add rule name="HeadHunter" dir=in action=allow protocol=TCP localport=${PORT}`);
