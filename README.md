@@ -18,6 +18,8 @@
 Нужен Node.js 20 или новее.
 
 ```bash
+git clone https://github.com/Georgy04/HeadHunter.git
+cd HeadHunter
 npm install
 npm start
 ```
