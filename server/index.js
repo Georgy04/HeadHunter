@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -422,10 +424,85 @@ function escapeHtml(text) {
 
 app.use((req, res) => res.status(404).json({ error: 'Не найдено' }));
 
+// Ведущий останавливает сервер закрытием окна, но окно теряется среди других, а
+// искать процесс руками он не должен. PID пишем на диск — по нему stop.cmd
+// находит сервер, а start.cmd замечает, что тот уже запущен.
+const PID_FILE = path.join(ROOT, 'data', 'server.pid');
+let ownsPidFile = false;
+
+function pidFromFile() {
+  try {
+    const pid = Number(fs.readFileSync(PID_FILE, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+function claimPidFile() {
+  // Чужую отметку не трогаем: затерев её, мы отняли бы у ведущего единственный
+  // простой способ остановить работающий сервер.
+  const running = pidFromFile();
+  if (running && running !== process.pid && isAlive(running)) return;
+  try {
+    fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
+    fs.writeFileSync(PID_FILE, `${process.pid}\n`);
+    ownsPidFile = true;
+  } catch (err) {
+    console.error(`[server] could not write ${PID_FILE}: ${err.message}`);
+  }
+}
+
+function releasePidFile() {
+  if (!ownsPidFile) return;
+  ownsPidFile = false;
+  if (pidFromFile() !== process.pid) return;
+  try {
+    fs.unlinkSync(PID_FILE);
+  } catch {}
+}
+
+// Порт проверяем до запуска. Windows успевает выдать событие «слушаю» раньше
+// ошибки, и второй экземпляр печатает бодрый баннер, а сразу за ним — отказ.
+// Ведущему такое читать незачем, поэтому спрашиваем порт заранее.
+function portIsTaken(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: '127.0.0.1' });
+    const done = (taken) => {
+      socket.destroy();
+      resolve(taken);
+    };
+    socket.setTimeout(500);
+    socket.once('connect', () => done(true));
+    socket.once('timeout', () => done(false));
+    socket.once('error', () => done(false));
+  });
+}
+
+if (await portIsTaken(PORT)) {
+  console.error('');
+  console.error(`  Port ${PORT} is already taken: HeadHunter is probably running already.`);
+  console.error('  Stop the running one first: stop.cmd, or Ctrl+C in its window.');
+  console.error('  Another port instead: PORT=8080 npm start.');
+  console.error('');
+  process.exit(1);
+}
+
 const server = app.listen(PORT, '0.0.0.0', async () => {
   const interfaces = lanInterfaces();
   const primary = interfaces[0]?.address ?? 'localhost';
   const url = `http://${primary}:${PORT}`;
+
+  claimPidFile();
 
   console.log('');
   console.log('  HeadHunter server is running');
@@ -445,6 +522,13 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
     }
     console.log('  --------------------------------------------');
   }
+  console.log('  Keep this window open: the server lives as long as it does.');
+  if (process.platform === 'win32') {
+    console.log('  To stop the game: press Ctrl+C, close this window or double-click stop.cmd.');
+  } else {
+    console.log('  To stop the game: press Ctrl+C or close this window.');
+  }
+  console.log('  --------------------------------------------');
   if (process.platform === 'win32') {
     console.log('  If phones cannot connect, allow the port through the firewall (run as admin):');
     console.log(`  netsh advfirewall firewall add rule name="HeadHunter" dir=in action=allow protocol=TCP localport=${PORT}`);
@@ -455,9 +539,22 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
   } catch {}
 });
 
+// Порт могли занять и в зазоре между проверкой и запуском — тогда сюда.
+server.on('error', (err) => {
+  if (err.code !== 'EADDRINUSE') throw err;
+  console.error('');
+  console.error(`  Port ${PORT} is busy, someone took it just now.`);
+  console.error('  Stop the other server and start again.');
+  console.error('');
+  process.exit(1);
+});
+
+process.on('exit', releasePidFile);
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     saveSync();
+    releasePidFile();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   });
