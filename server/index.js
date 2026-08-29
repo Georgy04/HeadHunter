@@ -439,20 +439,9 @@ function pidFromFile() {
   }
 }
 
-function isAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return err.code === 'EPERM';
-  }
-}
-
+// Сюда попадаем только заняв порт, то есть сервер здесь — мы. Прежнюю отметку
+// перезаписываем не глядя: она либо наша, либо осталась от прошлого запуска.
 function claimPidFile() {
-  // Чужую отметку не трогаем: затерев её, мы отняли бы у ведущего единственный
-  // простой способ остановить работающий сервер.
-  const running = pidFromFile();
-  if (running && running !== process.pid && isAlive(running)) return;
   try {
     fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
     fs.writeFileSync(PID_FILE, `${process.pid}\n`);

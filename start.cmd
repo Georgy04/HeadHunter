@@ -15,15 +15,20 @@ if errorlevel 1 (
 )
 
 rem Второй запуск поверх первого выглядел бы как непонятная ошибка про занятый порт.
+rem Отметка переживает жёсткую перезагрузку, а её номер достаётся потом чужому
+rem процессу. Поэтому верим ей только если процесс и правда слушает наш порт.
+set SRVUP=
 if exist "data\server.pid" (
   set /p SRVPID=<"data\server.pid"
-  tasklist /FI "PID eq !SRVPID!" 2>nul | find /I "node.exe" >nul
-  if not errorlevel 1 (
-    echo Сервер уже запущен, второй раз запускать не нужно.
-    echo Его окно где-то открыто; остановить сервер можно файлом stop.cmd.
-    pause
-    exit /b 1
+  for /f "tokens=5" %%p in ('netstat -ano ^| findstr /C:":3000 " ^| findstr /C:"LISTENING"') do (
+    if "%%p"=="!SRVPID!" set SRVUP=1
   )
+)
+if defined SRVUP (
+  echo Сервер уже запущен, второй раз запускать не нужно.
+  echo Его окно где-то открыто; остановить сервер можно файлом stop.cmd.
+  pause
+  exit /b 1
 )
 
 if not exist node_modules (

@@ -13,9 +13,14 @@ if not exist "data\server.pid" (
   exit /b 0
 )
 
+rem Убиваем процесс только если он и правда слушает наш порт: после жёсткой
+rem перезагрузки отметка остаётся, а её номер Windows выдаёт кому угодно.
 set /p SRVPID=<"data\server.pid"
-tasklist /FI "PID eq !SRVPID!" 2>nul | find /I "node.exe" >nul
-if errorlevel 1 (
+set SRVUP=
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /C:":3000 " ^| findstr /C:"LISTENING"') do (
+  if "%%p"=="!SRVPID!" set SRVUP=1
+)
+if not defined SRVUP (
   echo Сервер уже остановлен, убираю старую отметку.
   del "data\server.pid" >nul 2>nul
   pause
