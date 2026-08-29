@@ -64,6 +64,16 @@ function lanAddresses() {
 
 const baseUrl = (req) => `${req.protocol}://${req.get('host')}`;
 
+// Пульт на ноутбуке-сервере часто открывают через localhost, а такой адрес в QR
+// телефоны открыть не смогут. Для входа игроков всегда подставляем адрес в сети.
+function joinUrl(req) {
+  const hostname = (req.get('host') ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  const [primary] = lanAddresses();
+  if (!isLocal || !primary) return `${baseUrl(req)}/`;
+  return `${req.protocol}://${primary}:${PORT}/`;
+}
+
 function handle(fn) {
   return async (req, res) => {
     try {
@@ -293,7 +303,7 @@ app.get(
   '/api/admin/join-qr',
   handle(async (req, res) => {
     requireAdmin(req);
-    const url = `${baseUrl(req)}/`;
+    const url = joinUrl(req);
     res.json({
       url,
       dataUrl: await QRCode.toDataURL(url, { margin: 1, width: 320 }),
