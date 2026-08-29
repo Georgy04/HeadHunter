@@ -1,0 +1,22 @@
+{
+  "name": "headhunter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HeadHunter - social deduction party game server (Killer variant)",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "smoke": "node scripts/smoke.mjs",
+    "check": "node scripts/check-docs.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4"
+  }
+}

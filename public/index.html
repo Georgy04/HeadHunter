@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0f14" />
+    <title>HeadHunter</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <!-- Шаг 1. Регистрация -->
+    <section id="screen-register" class="screen">
+      <div class="join-wrap">
+        <h1 class="logo">Head<span>Hunter</span></h1>
+        <p class="lead" id="register-lead">Придумайте себе никнейм. Под ним вас будут искать всю игру — постарайтесь, чтобы он вас не выдал.</p>
+
+        <label class="field">
+          <span>Ваше имя — как вас знают остальные</span>
+          <input id="input-name" autocomplete="name" placeholder="Иван Петров" />
+        </label>
+
+        <label class="field">
+          <span>Никнейм — под ним вас никто не должен узнать</span>
+          <input id="input-nickname" autocomplete="off" placeholder="Однорукий Джо" />
+        </label>
+        <button class="btn ghost" id="btn-suggest" style="width: 100%; margin-bottom: 16px">Придумать за меня</button>
+
+        <button id="btn-register" class="btn primary big">Готово</button>
+        <p id="register-error" class="error hidden"></p>
+      </div>
+    </section>
+
+    <!-- Шаг 2. Ожидание: сначала выдачи бейджа, потом старта игры -->
+    <section id="screen-wait" class="screen hidden">
+      <div class="join-wrap">
+        <h1 class="logo" id="wait-title">Ваша эмблема</h1>
+        <p class="lead" id="wait-lead">Покажите этот экран ведущему — он выдаст бейдж с такой эмблемой.</p>
+
+        <div id="wait-emblem" class="join-emblem"></div>
+        <p id="wait-desc" class="muted center small"></p>
+        <div id="wait-code" class="wait-code"></div>
+
+        <div class="card">
+          <div class="card-label">Это вы</div>
+          <div class="big-name center" id="wait-name">—</div>
+          <p class="muted small center">Никнейм: <b id="wait-nickname">—</b></p>
+        </div>
+
+        <p class="muted small center" id="wait-note">Экран сменится сам, как только ведущий подтвердит выдачу.</p>
+      </div>
+    </section>
+
+    <!-- Игра -->
+    <section id="screen-game" class="screen hidden">
+      <header class="topbar">
+        <div class="topbar-id">
+          <div class="nickname" id="top-nickname">—</div>
+          <div class="muted small" id="top-status">—</div>
+        </div>
+        <div class="score" id="top-score">0</div>
+      </header>
+
+      <main class="view" id="view-home">
+        <div id="inbox" class="inbox"></div>
+
+        <div class="card contract">
+          <div class="card-label">Ваша цель</div>
+          <div class="target" id="target-nickname">—</div>
+          <p class="muted small">Никнейм известен. Кто это на самом деле — предстоит выяснить по эмблеме на бейдже.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Подсказки о цели <span id="hints-left" class="muted"></span></div>
+          <ul class="hints" id="hints-list"></ul>
+          <p class="muted small">Каждая подсказка отсекает две трети подозреваемых. Четвёртая указывает на одного человека.</p>
+          <div class="code-row">
+            <input id="input-code" placeholder="Код за активность" autocapitalize="characters" spellcheck="false" />
+            <button class="btn" id="btn-code">Ввести</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Патроны</div>
+          <div class="ammo" id="ammo-dots"></div>
+          <p class="muted small" id="ammo-note"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Ваша эмблема</div>
+          <div class="emblem-big" id="my-emblem"></div>
+          <p class="muted small center" id="my-emblem-note"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Ваши выстрелы</div>
+          <ul class="log" id="log-list">
+            <li class="muted small">Пока не стреляли</li>
+          </ul>
+        </div>
+      </main>
+
+      <main class="view hidden" id="view-shoot">
+        <div class="card">
+          <div class="card-label">Выстрел</div>
+          <p class="muted small">
+            Выберите человека, который, по-вашему, и есть <b id="shoot-target">—</b>.
+            Попадание <b id="shoot-hit">+10</b>, промах <b id="shoot-miss">−3</b>. Можно не стрелять и подождать подсказок.
+          </p>
+        </div>
+        <input class="search" id="search-shoot" placeholder="Поиск по имени" />
+        <div class="people" id="list-shoot"></div>
+      </main>
+
+      <main class="view hidden" id="view-defense">
+        <div class="card">
+          <div class="card-label">Защита</div>
+          <p class="muted small">
+            Назовите того, кто, по-вашему, охотится на вас. Угадали — <b id="defense-points">+8</b> очков
+            и щит: ближайший выстрел этого охотника по вам не пройдёт.
+          </p>
+          <p class="muted small" id="defense-status"></p>
+        </div>
+        <input class="search" id="search-defense" placeholder="Поиск по имени" />
+        <div class="people" id="list-defense"></div>
+      </main>
+
+      <main class="view hidden" id="view-board">
+        <div class="card">
+          <div class="card-label">Табло</div>
+          <ol class="board" id="board-list"></ol>
+        </div>
+      </main>
+
+      <nav class="tabbar">
+        <button class="tab active" data-view="home">Цель</button>
+        <button class="tab" data-view="shoot">Выстрел</button>
+        <button class="tab" data-view="defense">Защита</button>
+        <button class="tab" data-view="board">Табло</button>
+      </nav>
+    </section>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <div id="modal-body"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="modal-cancel">Отмена</button>
+          <button class="btn danger" id="modal-confirm">Подтвердить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="flash" class="flash hidden"><div class="flash-inner" id="flash-inner"></div></div>
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

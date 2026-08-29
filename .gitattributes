@@ -1,0 +1,5 @@
+# Проект переносится между Windows и Unix, поэтому переводы строк фиксируем:
+# скрипт для Unix с CRLF просто не запустится, а .cmd для Windows требует CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

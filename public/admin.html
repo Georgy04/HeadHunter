@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HeadHunter — пульт ведущего</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:," />
+    <style>
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 20px 60px; }
+      .head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+      .cols { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+      @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .row .btn { flex: 1; min-width: 120px; padding: 11px 12px; font-size: 14px; }
+      .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .stat { background: var(--card-2); border-radius: 12px; padding: 10px 12px; }
+      .stat b { display: block; font-size: 22px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th { text-align: left; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 0 8px 10px; font-weight: 600; }
+      td { padding: 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+      td svg { display: block; }
+      .mono { font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; }
+      .mini-btn { border: 1px solid var(--line); background: var(--card-2); color: var(--text); border-radius: 8px; padding: 5px 9px; cursor: pointer; font-size: 13px; }
+      .mini-btn:hover { border-color: var(--accent); }
+      .cfg { display: grid; grid-template-columns: 1fr 88px; gap: 8px 10px; align-items: center; font-size: 14px; }
+      .cfg input { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 8px; width: 100%; }
+      .events { max-height: 320px; overflow: auto; font-size: 13px; }
+      .codes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; max-height: 220px; overflow: auto; }
+      .code-chip { font-family: ui-monospace, Consolas, monospace; font-size: 13px; letter-spacing: 1px; padding: 5px 9px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); }
+      .code-chip.spent { opacity: 0.4; text-decoration: line-through; }
+      .code-chip b { color: var(--warn); font-weight: 600; }
+      .no-badge { color: var(--accent); }
+      .pend { display: grid; grid-template-columns: 68px 1fr 140px auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+      .pend:first-child { border-top: 0; }
+      .pend svg { display: block; }
+      .pend .code-input { width: 100%; padding: 9px 10px; background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: ui-monospace, Consolas, monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .pend .acts { display: flex; gap: 6px; }
+      .pend .btn { padding: 10px 14px; font-size: 14px; }
+      .events div { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+      .qr img { width: 100%; border-radius: 12px; background: #fff; padding: 8px; }
+      a.link { color: var(--warn); }
+      .offline { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head">
+        <h1 class="logo" style="text-align: left; margin: 0">Head<span>Hunter</span> · пульт</h1>
+        <div id="status-line" class="muted"></div>
+      </div>
+
+      <section id="auth" class="card hidden" style="max-width: 420px">
+        <div class="card-label">Токен ведущего</div>
+        <input id="token-input" class="mono" style="width: 100%; padding: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text)" placeholder="Токен из консоли сервера" />
+        <button class="btn primary big" id="token-save" style="margin-top: 12px">Войти</button>
+      </section>
+
+      <div id="panel" class="cols hidden">
+        <div>
+          <div class="card">
+            <div class="card-label">Управление игрой</div>
+            <div class="row">
+              <button class="btn primary" data-action="start">Старт</button>
+              <button class="btn" data-action="pause">Пауза</button>
+              <button class="btn" data-action="resume">Продолжить</button>
+              <button class="btn" data-action="finish">Финал</button>
+              <button class="btn ghost" data-action="reshuffle">Перераздать цели</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Бейджи</div>
+            <div class="row">
+              <input id="slot-count" type="number" min="1" max="300" value="30" style="flex: 1; padding: 10px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text)" />
+              <button class="btn" id="btn-slots">Создать набор</button>
+              <button class="btn ghost" id="btn-slots-add">Добавить</button>
+            </div>
+            <p class="muted small">
+              Печать: <a class="link" id="print-link" href="#" target="_blank">все бейджи</a> ·
+              <a class="link" id="print-free-link" href="#" target="_blank">только невыданные</a>.
+              «Добавить» допечатывает бейджи, не задев уже выданные.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Коды за активности</div>
+            <div class="cfg">
+              <label class="muted">Сколько кодов</label><input id="code-count" type="number" min="1" max="200" value="10" />
+              <label class="muted">Очков за код</label><input id="code-points" type="number" value="0" />
+              <label class="muted">Использований</label><input id="code-uses" type="number" min="1" value="1" />
+              <label class="muted">Даёт подсказку</label><input id="code-hint" type="checkbox" checked style="width: auto" />
+              <label class="muted">Пометка</label><input id="code-note" placeholder="за викторину" />
+            </div>
+            <button class="btn" id="btn-codes" style="margin-top: 12px; width: 100%">Выпустить</button>
+            <div class="codes" id="codes-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Статистика</div>
+            <div class="stats" id="stats"></div>
+          </div>
+
+          <div class="card qr">
+            <div class="card-label">Вход для игроков</div>
+            <img id="qr" alt="QR" />
+            <p class="muted small" id="join-url"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Настройки</div>
+            <div class="cfg" id="cfg"></div>
+            <button class="btn" id="btn-cfg" style="margin-top: 12px; width: 100%">Сохранить</button>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Опасная зона</div>
+            <button class="btn ghost" id="btn-reset" style="width: 100%">Сбросить игру целиком</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-label">Ожидают выдачи <span id="pending-count" class="muted"></span></div>
+            <div id="pending-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Игроки <span id="players-count" class="muted"></span></div>
+            <table>
+              <thead>
+                <tr>
+                  <th></th><th>Имя</th><th>Никнейм</th><th>Цель</th><th>Очки</th><th>Стрельба</th><th>Подсказки</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="players"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Лента событий</div>
+            <div class="events" id="events"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/admin.js"></script>
+  </body>
+</html>
