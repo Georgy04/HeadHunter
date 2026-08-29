@@ -17,6 +17,7 @@ import {
   emblemSvg,
   grantHint,
   issueBadge,
+  loginWithPin,
   playerByToken,
   playerView,
   players,
@@ -24,6 +25,7 @@ import {
   redeemCode,
   registerPlayer,
   removePlayer,
+  resetPin,
   setGameStatus,
   shoot,
   startGame,
@@ -112,7 +114,17 @@ app.get(
 app.post(
   '/api/register',
   handle((req, res) => {
-    const player = registerPlayer(req.body?.name, req.body?.nickname);
+    const player = registerPlayer(req.body?.name, req.body?.nickname, req.body?.pin);
+    res.json({ token: player.token, ...playerView(player) });
+  })
+);
+
+// Вход по «имя + PIN»: токен живёт в одном браузере, а телефон могут почистить,
+// потерять или сменить. Без этого вернуться в свой кабинет было бы нельзя.
+app.post(
+  '/api/login',
+  handle((req, res) => {
+    const player = loginWithPin(req.body?.name, req.body?.pin);
     res.json({ token: player.token, ...playerView(player) });
   })
 );
@@ -255,6 +267,16 @@ app.post(
     requireAdmin(req);
     const slot = reassignBadge(req.params.id);
     res.json({ code: slot.code, ...adminView() });
+  })
+);
+
+// Забытый PIN: ведущий выдаёт новый и называет его игроку лично.
+app.post(
+  '/api/admin/player/:id/pin/reset',
+  handle((req, res) => {
+    requireAdmin(req);
+    const pin = resetPin(req.params.id);
+    res.json({ pin, ...adminView() });
   })
 );
 

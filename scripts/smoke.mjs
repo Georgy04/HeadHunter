@@ -100,10 +100,12 @@ check(
 // 2. Регистрация со своим никнеймом
 const NAMES = ['Аня Смирнова', 'Борис Ким', 'Вера Ли', 'Глеб Орлов'];
 const NICKS = ['Однорукий Джо', 'Тихий Омут', 'Мадам Брошь', 'Пыльный Гриф'];
+const PINS = ['2468', '9137', '4802', '7351'];
+const PIN = '2468';
 const tokens = [];
 const ids = [];
 for (const [i, name] of NAMES.entries()) {
-  const res = await call('/api/register', { method: 'POST', body: { name, nickname: NICKS[i] } });
+  const res = await call('/api/register', { method: 'POST', body: { name, nickname: NICKS[i], pin: PINS[i] } });
   check(`${name} зарегистрировался`, res.status === 200 && Boolean(res.data.token), res.data.error ?? '');
   tokens.push(res.data.token);
   ids.push(res.data.me?.id);
@@ -117,14 +119,23 @@ check(
 );
 check('до выдачи бейджа игрок в игре не считается', firstView.data.me.hasBadge === false);
 
-const dupNick = await call('/api/register', { method: 'POST', body: { name: 'Кто-то', nickname: NICKS[0] } });
+const dupNick = await call('/api/register', { method: 'POST', body: { name: 'Кто-то', nickname: NICKS[0], pin: PIN } });
 check('никнейм нельзя занять дважды', dupNick.status === 409, `status ${dupNick.status}`);
 
-const dupName = await call('/api/register', { method: 'POST', body: { name: NAMES[0], nickname: 'Свежий Ник' } });
+const dupName = await call('/api/register', { method: 'POST', body: { name: NAMES[0], nickname: 'Свежий Ник', pin: PIN } });
 check('имя нельзя занять дважды', dupName.status === 409, `status ${dupName.status}`);
 
-const sameAsName = await call('/api/register', { method: 'POST', body: { name: 'Пётр Пух', nickname: 'Пётр Пух' } });
+const sameAsName = await call('/api/register', { method: 'POST', body: { name: 'Пётр Пух', nickname: 'Пётр Пух', pin: PIN } });
 check('никнейм не может совпадать со своим именем', sameAsName.status === 400, `status ${sameAsName.status}`);
+
+for (const [label, badPin] of [['без PIN', undefined], ['PIN из трёх цифр', '123'], ['PIN с буквами', '12a4']]) {
+  const res = await call('/api/register', { method: 'POST', body: { name: 'Кто Угодно', nickname: 'Ктоугодник', pin: badPin } });
+  check(`регистрация ${label} не проходит`, res.data.code === 'bad_pin', JSON.stringify(res.data));
+}
+for (const weak of ['1111', '1234', '9876']) {
+  const res = await call('/api/register', { method: 'POST', body: { name: 'Кто Угодно', nickname: 'Ктоугодник', pin: weak } });
+  check(`PIN ${weak} отвергнут как угадываемый`, res.data.code === 'weak_pin', JSON.stringify(res.data));
+}
 
 const suggestion = await call('/api/nickname');
 check('сервер умеет предлагать никнейм', typeof suggestion.data.nickname === 'string' && suggestion.data.nickname.length > 3);
@@ -178,7 +189,7 @@ const issuedTwice = await call(`/api/admin/player/${ids[1]}/badge`, { method: 'P
 check('дважды выдать бейдж одному игроку нельзя', issuedTwice.data.code === 'has_badge', JSON.stringify(issuedTwice.data));
 
 // Черновой игрок для проверки отказов, перевыдачи и освобождения резерва
-const temp = await call('/api/register', { method: 'POST', body: { name: 'Тест Тестов', nickname: 'Черновик' } });
+const temp = await call('/api/register', { method: 'POST', body: { name: 'Тест Тестов', nickname: 'Черновик', pin: PIN } });
 const tempId = temp.data.me.id;
 const tempCode = temp.data.me.emblem.code;
 
@@ -368,7 +379,7 @@ check('кулдаун между выстрелами работает', hot.dat
 await call('/api/admin/config', { method: 'PATCH', body: { shotCooldownSeconds: 0, ammoMax: 6 }, admin });
 
 // 10. Поздний участник входит в игру на второй день
-const late = await call('/api/register', { method: 'POST', body: { name: 'Дима Поздний', nickname: 'Опоздун' } });
+const late = await call('/api/register', { method: 'POST', body: { name: 'Дима Поздний', nickname: 'Опоздун', pin: PIN } });
 const lateBeforeIssue = await call('/api/me', { token: late.data.token });
 check('поздний участник до выдачи бейджа без контракта', !lateBeforeIssue.data.me.target);
 check(
@@ -430,10 +441,10 @@ check(
 // 13. Бейджи кончились: регистрация отказывает понятно, набор дописывается на ходу
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
 await call('/api/admin/slots', { method: 'POST', body: { count: 1 }, admin });
-const firstIn = await call('/api/register', { method: 'POST', body: { name: 'Первый Пришедший', nickname: 'Первяк' } });
+const firstIn = await call('/api/register', { method: 'POST', body: { name: 'Первый Пришедший', nickname: 'Первяк', pin: PIN } });
 check('единственный бейдж достался первому', firstIn.status === 200 && Boolean(firstIn.data.me.emblem?.code));
 
-const noSlots = await call('/api/register', { method: 'POST', body: { name: 'Второй Пришедший', nickname: 'Вторяк' } });
+const noSlots = await call('/api/register', { method: 'POST', body: { name: 'Второй Пришедший', nickname: 'Вторяк', pin: PIN } });
 check('когда бейджи кончились, регистрация отказывает понятно', noSlots.data.code === 'no_slots', JSON.stringify(noSlots.data));
 
 const replaceInUse = await call('/api/admin/slots', { method: 'POST', body: { count: 5 }, admin });
@@ -442,7 +453,7 @@ check('набор нельзя заменить, пока бейджи в раб
 const added = await call('/api/admin/slots', { method: 'POST', body: { count: 2, append: true }, admin });
 check('бейджи можно допечатать, не сбрасывая игру', added.data.count === 2, JSON.stringify(added.data));
 
-const afterAdd = await call('/api/register', { method: 'POST', body: { name: 'Второй Пришедший', nickname: 'Вторяк' } });
+const afterAdd = await call('/api/register', { method: 'POST', body: { name: 'Второй Пришедший', nickname: 'Вторяк', pin: PIN } });
 check('после допечатки регистрация проходит', afterAdd.status === 200, afterAdd.data.error ?? '');
 
 await sleep(300);
@@ -453,6 +464,67 @@ check(
     raw.slots.length,
   `слотов ${raw.slots.length}`
 );
+
+// 14. Возврат в свой кабинет: телефон почистили, токена нет, входим по имени и PIN
+await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
+await call('/api/admin/slots', { method: 'POST', body: { count: 3 }, admin });
+const back = await call('/api/register', { method: 'POST', body: { name: 'Оля Забывчивая', nickname: 'Потеряшка', pin: '5791' } });
+const backId = back.data.me.id;
+await call(`/api/admin/player/${backId}/badge`, { method: 'POST', admin });
+await call(`/api/admin/player/${backId}/score`, { method: 'POST', body: { delta: 7, reason: 'проверка' }, admin });
+
+const loginOk = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: '5791' } });
+check(
+  'вход по имени и PIN возвращает тот же кабинет',
+  loginOk.status === 200 && loginOk.data.token === back.data.token,
+  JSON.stringify(loginOk.data.error ?? '')
+);
+check('после входа очки и бейдж на месте', loginOk.data.me.score === 7 && loginOk.data.me.hasBadge === true);
+
+const messyName = await call('/api/login', { method: 'POST', body: { name: '  оля   ЗАБЫВЧИВАЯ ', pin: '5791' } });
+check('имя при входе терпит регистр и лишние пробелы', messyName.status === 200, `status ${messyName.status}`);
+
+const noSuchPlayer = await call('/api/login', { method: 'POST', body: { name: 'Нет Такого', pin: '5791' } });
+check('вход под несуществующим именем отказывает', noSuchPlayer.data.code === 'no_player', JSON.stringify(noSuchPlayer.data));
+
+const wrongPin = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: '1357' } });
+check('неверный PIN не пускает', wrongPin.status === 401 && wrongPin.data.code === 'bad_pin', JSON.stringify(wrongPin.data));
+
+let lockedOut = null;
+for (let i = 0; i < 4; i++) {
+  lockedOut = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: '1357' } });
+}
+check('после пяти промахов подбор блокируется', lockedOut.status === 429 && lockedOut.data.code === 'locked', JSON.stringify(lockedOut.data));
+
+const lockedRight = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: '5791' } });
+check('блокировка действует и на верный PIN', lockedRight.data.code === 'locked', JSON.stringify(lockedRight.data));
+
+const lockView = await call('/api/admin/state', { admin });
+const lockRow = lockView.data.players.find((p) => p.id === backId);
+check('пульт показывает заблокированный вход', lockRow.loginBlockedUntil > Date.now(), JSON.stringify(lockRow.loginBlockedUntil));
+
+const newPin = await call(`/api/admin/player/${backId}/pin/reset`, { method: 'POST', admin });
+check('ведущий выдаёт новый PIN из четырёх цифр', /^\d{4}$/.test(newPin.data.pin ?? ''), JSON.stringify(newPin.data.pin));
+
+const afterReset = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: newPin.data.pin } });
+check(
+  'новый PIN пускает и снимает блокировку',
+  afterReset.status === 200 && afterReset.data.token === back.data.token,
+  JSON.stringify(afterReset.data.error ?? '')
+);
+
+const oldPin = await call('/api/login', { method: 'POST', body: { name: 'Оля Забывчивая', pin: '5791' } });
+check('прежний PIN после сброса не работает', oldPin.data.code === 'bad_pin', JSON.stringify(oldPin.data));
+
+await sleep(300);
+raw = await readState();
+const stored = Object.values(raw.players).find((p) => p.id === backId);
+check('PIN не хранится в открытом виде', !('pin' in stored) && typeof stored.pinHash === 'string' && typeof stored.pinSalt === 'string');
+check('у каждого игрока своя соль', stored.pinSalt.length === 32);
+
+const meAfterLogin = await call('/api/me', { token: back.data.token });
+check('состояние игрока не содержит хеш PIN', !JSON.stringify(meAfterLogin.data).includes('pinHash'));
+check('пульт не показывает хеш PIN', !JSON.stringify(lockRow).includes('pinHash'));
 
 // Тест крутил темп игры и наплодил игроков — возвращаем сервер в исходное состояние.
 await call('/api/admin/config', {

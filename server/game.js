@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { state, save, logEvent, newId, newJoinCode } from './store.js';
 import { generateEmblemSet, renderEmblem, describeEmblem, hintText, newHintOrder, shuffle } from './emblems.js';
 
@@ -44,6 +45,41 @@ function validateNickname(nickname, exceptId) {
   return value;
 }
 
+// PIN нужен не против взлома, а чтобы игрок мог вернуться в свой кабинет с другого
+// телефона: токен живёт в одном браузере и теряется вместе с ним. Имена участников
+// публичны, поэтому подбор ограничен счётчиком попыток.
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_BLOCK_MINUTES = 5;
+
+function weakPin(value) {
+  if (/^(\d)\1{3}$/.test(value)) return true;
+  const digits = [...value].map(Number);
+  const step = digits[1] - digits[0];
+  return (step === 1 || step === -1) && digits.every((d, i) => i === 0 || d - digits[i - 1] === step);
+}
+
+function validatePin(pin) {
+  const value = String(pin ?? '').trim();
+  if (!/^\d{4}$/.test(value)) throw new GameError('PIN — это четыре цифры', 400, 'bad_pin');
+  if (weakPin(value)) throw new GameError('Такой PIN угадают с первой попытки, придумайте другой', 400, 'weak_pin');
+  return value;
+}
+
+function setPin(player, pin) {
+  const salt = crypto.randomBytes(16);
+  player.pinSalt = salt.toString('hex');
+  player.pinHash = crypto.scryptSync(pin, salt, 32).toString('hex');
+  player.loginFails = 0;
+  player.loginBlockedUntil = 0;
+}
+
+function pinMatches(player, pin) {
+  if (!player.pinHash || !player.pinSalt) return false;
+  const expected = Buffer.from(player.pinHash, 'hex');
+  const actual = crypto.scryptSync(String(pin ?? ''), Buffer.from(player.pinSalt, 'hex'), expected.length);
+  return crypto.timingSafeEqual(expected, actual);
+}
+
 const freeSlot = (exceptId = null) =>
   state.slots.find((s) => !s.claimedBy && !s.reservedBy && s.id !== exceptId) ?? null;
 
@@ -52,9 +88,10 @@ const freeSlot = (exceptId = null) =>
  * экраном человек идёт к ведущему и получает свой бейдж. Бейдж не выдан —
  * игрока в игре нет: его нельзя опознать, назначить целью и он не может стрелять.
  */
-export function registerPlayer(name, nickname) {
+export function registerPlayer(name, nickname, pin) {
   const cleanName = validateName(name);
   const cleanNickname = validateNickname(nickname);
+  const cleanPin = validatePin(pin);
   if (cleanName.toLowerCase() === cleanNickname.toLowerCase()) {
     throw new GameError('Никнейм не должен совпадать с вашим именем — иначе вас вычислят за минуту');
   }
@@ -90,12 +127,73 @@ export function registerPlayer(name, nickname) {
     createdAt: Date.now(),
     lastSeenAt: Date.now(),
   };
+  setPin(player, cleanPin);
 
   state.players[player.id] = player;
   slot.reservedBy = player.id;
   logEvent('player_registered', { playerId: player.id, name: cleanName, nickname: cleanNickname, code: slot.code });
   save();
   return player;
+}
+
+/**
+ * Возврат в свой кабинет с другого телефона или после очистки браузера.
+ * Имя не тайна, поэтому единственная преграда — PIN, и попытки ограничены.
+ */
+export function loginWithPin(name, pin) {
+  const wanted = norm(name).toLowerCase();
+  const player = players().find((p) => p.name.toLowerCase() === wanted);
+  if (!player) throw new GameError('Участника с таким именем нет', 404, 'no_player');
+  if (!player.pinHash) throw new GameError('У этого участника нет PIN — подойдите к ведущему', 409, 'no_pin');
+
+  const now = Date.now();
+  const blockLeft = Math.ceil(((player.loginBlockedUntil ?? 0) - now) / 60000);
+  if (blockLeft > 0) {
+    throw new GameError(`Слишком много попыток. Ещё ${blockLeft} мин или подойдите к ведущему`, 429, 'locked');
+  }
+
+  if (!pinMatches(player, pin)) {
+    player.loginFails = (player.loginFails ?? 0) + 1;
+    if (player.loginFails >= LOGIN_MAX_FAILS) {
+      player.loginFails = 0;
+      player.loginBlockedUntil = now + LOGIN_BLOCK_MINUTES * 60_000;
+      logEvent('login_blocked', { playerId: player.id, name: player.name });
+      save();
+      throw new GameError(
+        `Слишком много попыток. Ещё ${LOGIN_BLOCK_MINUTES} мин или подойдите к ведущему`,
+        429,
+        'locked'
+      );
+    }
+    const left = LOGIN_MAX_FAILS - player.loginFails;
+    logEvent('login_failed', { playerId: player.id, name: player.name, left });
+    save();
+    throw new GameError(`PIN не подходит. Осталось попыток: ${left}`, 401, 'bad_pin');
+  }
+
+  player.loginFails = 0;
+  player.loginBlockedUntil = 0;
+  player.lastSeenAt = now;
+  logEvent('login_ok', { playerId: player.id, name: player.name });
+  save();
+  return player;
+}
+
+/**
+ * Забытый PIN. Ведущий видит человека с бейджем, поэтому просто выдаёт новый:
+ * это то же личное подтверждение, на котором держится выдача бейджей.
+ */
+export function resetPin(playerId) {
+  const player = state.players[playerId];
+  if (!player) throw new GameError('Игрок не найден', 404);
+  let pin;
+  do {
+    pin = String(crypto.randomInt(1000, 10000));
+  } while (weakPin(pin));
+  setPin(player, pin);
+  logEvent('pin_reset', { playerId: player.id, name: player.name });
+  save();
+  return pin;
 }
 
 /**
@@ -665,6 +763,7 @@ export function adminView() {
           hints: p.hints.length,
           shielded: Boolean(p.shieldAgainst),
           lastSeenAt: p.lastSeenAt,
+          loginBlockedUntil: (p.loginBlockedUntil ?? 0) > Date.now() ? p.loginBlockedUntil : 0,
         };
       }),
     codes: state.codes

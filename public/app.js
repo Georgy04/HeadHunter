@@ -30,7 +30,7 @@ function toast(text, ms = 3000) {
 }
 
 function showScreen(name) {
-  ['register', 'wait', 'game'].forEach((screen) => {
+  ['register', 'login', 'wait', 'game'].forEach((screen) => {
     $(`screen-${screen}`).classList.toggle('hidden', screen !== name);
   });
 }
@@ -48,23 +48,66 @@ $('btn-suggest').addEventListener('click', async () => {
 $('btn-register').addEventListener('click', async () => {
   const name = $('input-name').value.trim();
   const nickname = $('input-nickname').value.trim();
+  const pin = $('input-pin').value.trim();
   $('register-error').classList.add('hidden');
   if (name.length < 2) return showError('register-error', 'Введите имя');
   if (nickname.length < 2) return showError('register-error', 'Придумайте никнейм');
+  if (!/^\d{4}$/.test(pin)) return showError('register-error', 'PIN — это четыре цифры');
 
   $('btn-register').disabled = true;
   try {
-    const data = await api('/api/register', { method: 'POST', body: { name, nickname } });
-    token = data.token;
-    localStorage.setItem(TOKEN_KEY, token);
-    apply(data);
-    startPolling();
+    const data = await api('/api/register', { method: 'POST', body: { name, nickname, pin } });
+    enterWith(data);
   } catch (err) {
     showError('register-error', err.message);
   } finally {
     $('btn-register').disabled = false;
   }
 });
+
+// Вход по «имя + PIN»: телефон могли почистить или сменить, а токен живёт только
+// в браузере. Имя не тайна, поэтому PIN здесь — единственная преграда.
+$('btn-login').addEventListener('click', async () => {
+  const name = $('login-name').value.trim();
+  const pin = $('login-pin').value.trim();
+  $('login-error').classList.add('hidden');
+  if (name.length < 2) return showError('login-error', 'Введите имя');
+  if (!/^\d{4}$/.test(pin)) return showError('login-error', 'PIN — это четыре цифры');
+
+  $('btn-login').disabled = true;
+  try {
+    const data = await api('/api/login', { method: 'POST', body: { name, pin } });
+    enterWith(data);
+  } catch (err) {
+    showError('login-error', err.message);
+  } finally {
+    $('btn-login').disabled = false;
+  }
+});
+
+$('btn-to-login').addEventListener('click', () => {
+  $('login-error').classList.add('hidden');
+  $('login-name').value = $('input-name').value.trim();
+  showScreen('login');
+});
+
+$('btn-to-register').addEventListener('click', () => {
+  $('register-error').classList.add('hidden');
+  showScreen('register');
+});
+
+['input-pin', 'login-pin'].forEach((id) => {
+  $(id).addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+  });
+});
+
+function enterWith(data) {
+  token = data.token;
+  localStorage.setItem(TOKEN_KEY, token);
+  apply(data);
+  startPolling();
+}
 
 function showError(id, text) {
   $(id).textContent = text;

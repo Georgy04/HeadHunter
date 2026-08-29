@@ -26,8 +26,37 @@
         </label>
         <button class="btn ghost" id="btn-suggest" style="width: 100%; margin-bottom: 16px">Придумать за меня</button>
 
+        <label class="field">
+          <span>PIN из четырёх цифр — понадобится, если смените телефон</span>
+          <input id="input-pin" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="0000" />
+        </label>
+
         <button id="btn-register" class="btn primary big">Готово</button>
         <p id="register-error" class="error hidden"></p>
+        <button class="btn ghost" id="btn-to-login" style="width: 100%; margin-top: 16px">Я уже регистрировался</button>
+      </div>
+    </section>
+
+    <!-- Возврат в свой кабинет с другого телефона -->
+    <section id="screen-login" class="screen hidden">
+      <div class="join-wrap">
+        <h1 class="logo">С возвращением</h1>
+        <p class="lead">Введите своё имя и PIN, который придумали при регистрации. Вернётесь к своей цели, очкам и подсказкам.</p>
+
+        <label class="field">
+          <span>Ваше имя</span>
+          <input id="login-name" autocomplete="name" placeholder="Иван Петров" />
+        </label>
+
+        <label class="field">
+          <span>PIN</span>
+          <input id="login-pin" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="0000" />
+        </label>
+
+        <button id="btn-login" class="btn primary big">Войти</button>
+        <p id="login-error" class="error hidden"></p>
+        <p class="muted small center">Забыли PIN — подойдите к ведущему, он выдаст новый.</p>
+        <button class="btn ghost" id="btn-to-register" style="width: 100%; margin-top: 16px">Я здесь впервые</button>
       </div>
     </section>
 

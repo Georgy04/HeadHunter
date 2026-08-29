@@ -79,8 +79,8 @@ function render() {
         <td>${esc(p.name)}<br /><span class="muted small">${
         p.hasBadge ? esc(p.emblemDescription) : 'ждёт выдачи бейджа'
       }</span></td>
-        <td>${esc(p.nickname)}<br /><span class="muted small ${stale ? 'offline' : ''}">${
-        stale ? 'давно не заходил' : 'на связи'
+        <td>${esc(p.nickname)}<br /><span class="muted small ${stale || p.loginBlockedUntil ? 'offline' : ''}">${
+        p.loginBlockedUntil ? 'вход заблокирован' : stale ? 'давно не заходил' : 'на связи'
       }</span></td>
         <td>${esc(p.targetName ?? '—')}<br /><span class="muted small">охотников: ${p.hunters}${
         p.shielded ? ' · щит' : ''
@@ -93,6 +93,7 @@ function render() {
           <button class="mini-btn" data-score="${p.id}" data-delta="-5">−5</button>
           <button class="mini-btn" data-hint="${p.id}">подсказка</button>
           <button class="mini-btn" data-retarget="${p.id}">цель</button>
+          <button class="mini-btn" data-pin="${p.id}">PIN</button>
           <button class="mini-btn" data-remove="${p.id}">✕</button>
         </td>
       </tr>`;
@@ -186,6 +187,10 @@ function describeEvent(e) {
     case 'targets_reshuffled': return 'цели перераспределены';
     case 'score_adjusted': return `${e.nickname}: ${e.delta > 0 ? '+' : ''}${e.delta} очков (${e.reason})`;
     case 'player_removed': return `${e.nickname} удалён из игры`;
+    case 'login_ok': return `${e.name} вошёл по PIN`;
+    case 'login_failed': return `неверный PIN для ${e.name} (осталось попыток: ${e.left})`;
+    case 'login_blocked': return `вход для ${e.name} заблокирован на 5 минут: слишком много попыток`;
+    case 'pin_reset': return `${e.name} получил новый PIN от ведущего`;
     default: return e.type;
   }
 }
@@ -302,6 +307,12 @@ $('players').addEventListener('click', async (event) => {
       toast(`Выдана подсказка: ${res.hint.text}`, 6000);
     } else if (btn.dataset.retarget) {
       data = await api(`/api/admin/player/${btn.dataset.retarget}/retarget`, { method: 'POST' });
+    } else if (btn.dataset.pin) {
+      if (!confirm('Выдать игроку новый PIN? Прежний перестанет работать.')) return;
+      const res = await api(`/api/admin/player/${btn.dataset.pin}/pin/reset`, { method: 'POST' });
+      data = res;
+      // PIN нужно назвать игроку голосом, поэтому висит на экране дольше обычного.
+      toast(`Новый PIN: ${res.pin} — назовите его игроку`, 20000);
     } else if (btn.dataset.remove) {
       if (!confirm('Удалить игрока из игры?')) return;
       data = await api(`/api/admin/player/${btn.dataset.remove}`, { method: 'DELETE' });

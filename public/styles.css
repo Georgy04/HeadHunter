@@ -59,6 +59,8 @@ html, body {
 }
 .field input:focus { border-color: var(--accent); }
 #input-code { text-transform: uppercase; letter-spacing: 3px; font-family: ui-monospace, Consolas, monospace; }
+#input-pin,
+#login-pin { text-align: center; letter-spacing: 12px; font: 700 22px/1.2 ui-monospace, Consolas, monospace; }
 
 /* Код бейджа на экране ожидания: ведущий читает его, чтобы найти бейдж в стопке. */
 .wait-code {
