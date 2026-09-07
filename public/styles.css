@@ -155,8 +155,8 @@ html, body {
   font-variant-numeric: tabular-nums;
   color: var(--accent);
 }
-.nickname { font-size: 18px; font-weight: 700; }
-.score { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* Очки — это ставка на аукционе, поэтому они выглядят как деньги. */
+.score::before { content: '$'; font-size: 17px; color: var(--muted); margin-right: 2px; }
 
 .view {
   display: block;
@@ -306,6 +306,8 @@ html, body {
 .search:focus { border-color: var(--accent); }
 
 .people { display: grid; gap: 8px; }
+/* Строка человека — это два действия: выбрать его и записать про него заметку,
+   поэтому обёртка не кнопка, а рамка вокруг двух кнопок. */
 .person {
   display: flex;
   align-items: stretch;
@@ -363,7 +365,20 @@ html, body {
 .note.exposed { border-color: var(--accent); background: rgba(255, 122, 26, 0.09); }
 .note.defense { border-color: var(--good); background: rgba(143, 190, 78, 0.08); }
 .note.hint,
-.note.contract { border-color: rgba(76, 201, 240, 0.45); background: rgba(76, 201, 240, 0.08); }
+.note.contract { border-color: var(--info); background: rgba(147, 180, 201, 0.07); }
+
+/* --- Салун: разговоры и пульс --- */
+.chat { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; }
+.chat li { padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 15px; }
+.chat li:last-child { border-bottom: 0; }
+.chat .who { color: var(--accent); font-weight: 700; }
+.chat .who.me { color: var(--warn); }
+.chat .when { float: right; font-size: 11px; color: var(--muted); }
+
+.pulse { list-style: none; margin: 0; padding: 0; }
+.pulse li { position: relative; padding: 7px 0 7px 22px; font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line-soft); }
+.pulse li:last-child { border-bottom: 0; }
+.pulse li::before { content: '·'; position: absolute; left: 8px; color: var(--accent); font-weight: 700; }
 
 /* --- Табло --- */
 .board { list-style: none; counter-reset: rank; margin: 0; padding: 0; }
@@ -396,6 +411,7 @@ html, body {
   background: linear-gradient(180deg, #1b1510, #100c08);
   border-top: 2px solid var(--line);
 }
+.tabbar-5 { grid-template-columns: repeat(5, 1fr); }
 .tab {
   border: 1px solid transparent;
   border-radius: var(--radius);

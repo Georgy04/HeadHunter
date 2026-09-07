@@ -1,4 +1,4 @@
-// Прогон полного сценария против запущенного сервера: регистрация со своим
+﻿// Прогон полного сценария против запущенного сервера: регистрация со своим
 // никнеймом, выдача бейджей, подсказки за коды, выстрелы по именам, защита,
 // щит и поздний участник. Запуск: node scripts/smoke.mjs
 
@@ -241,7 +241,7 @@ check('игрок видит никнейм цели', Boolean(view.data.me.targ
 check('игрок видит список реальных имён', view.data.roster.length === 4);
 check(
   'список имён не раскрывает никнеймы',
-  view.data.roster.every((p) => Object.keys(p).sort().join() === 'id,name')
+  view.data.roster.every((p) => Object.keys(p).sort().join() === 'id,name,note')
 );
 check(
   'табло показывает только никнеймы',
@@ -555,10 +555,192 @@ const meAfterLogin = await call('/api/me', { token: back.data.token });
 check('состояние игрока не содержит хеш PIN', !JSON.stringify(meAfterLogin.data).includes('pinHash'));
 check('пульт не показывает хеш PIN', !JSON.stringify(lockRow).includes('pinHash'));
 
+// 15. Розыск, салун и блокнот
+await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
+// Удержание объявления на время проверок снимаем: иначе розыск не будет успевать
+// за подкрученными очками. Его собственная проверка — ниже.
+await call('/api/admin/config', {
+  method: 'PATCH',
+  body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6, bountyHoldMinutes: 0 },
+  admin,
+});
+await call('/api/admin/slots', { method: 'POST', body: { count: 6 }, admin });
+
+const CREW = [
+  ['Женя Лидер', 'Меткий Туз', '2468'],
+  ['Зоя Вторая', 'Хмурый Клык', '9137'],
+  ['Игорь Третий', 'Рыжий Смерч', '4802'],
+  ['Кира Четвёртая', 'Пиковая Дама', '7351'],
+];
+const crew = [];
+for (const [name, nickname, pin] of CREW) {
+  const res = await call('/api/register', { method: 'POST', body: { name, nickname, pin } });
+  await call(`/api/admin/player/${res.data.me.id}/badge`, { method: 'POST', admin });
+  crew.push({ id: res.data.me.id, token: res.data.token, name, nickname });
+}
+await call('/api/admin/game/start', { method: 'POST', admin });
+await sleep(300);
+
+const [leader, runnerUp, watcher, marked] = crew;
+const wantedOf = async (who) => (await call('/api/me', { token: who.token })).data.wanted;
+
+// Ничья наверху табло розыска не даёт: игра не выбирает жребием.
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 12 }, admin });
+await call(`/api/admin/player/${runnerUp.id}/score`, { method: 'POST', body: { delta: 12 }, admin });
+check('при ничьей наверху розыска нет', (await wantedOf(watcher)) === null, JSON.stringify(await wantedOf(watcher)));
+
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 3 }, admin });
+const declared = await wantedOf(watcher);
+check('единственный лидер объявлен в розыск', declared?.nickname === leader.nickname, JSON.stringify(declared));
+check('награда взята из настроек', declared?.bounty === 15, JSON.stringify(declared?.bounty));
+check(
+  'имя разыскиваемого не раскрывают',
+  Object.keys(declared).sort().join() === 'bounty,isMe,isMyTarget,nickname,since',
+  Object.keys(declared).sort().join()
+);
+
+const leaderSees = await wantedOf(leader);
+check('разыскиваемый понимает, что это он', leaderSees.isMe === true);
+check('остальные не считают себя разыскиваемыми', declared.isMe === false);
+const leaderInbox = (await call('/api/me', { token: leader.token })).data.me.inbox;
+check('разыскиваемого предупредили', leaderInbox.some((m) => m.kind === 'wanted'), JSON.stringify(leaderInbox[0]));
+
+// Объявление держится, даже если наверху табло уже другой: иначе розыск мигал бы
+// на каждом начислении очков за активности.
+await call('/api/admin/config', { method: 'PATCH', body: { bountyHoldMinutes: 20 }, admin });
+await call(`/api/admin/player/${runnerUp.id}/score`, { method: 'POST', body: { delta: 40 }, admin });
+const held = await wantedOf(watcher);
+check('объявление держится, даже если лидер сменился', held?.nickname === leader.nickname, JSON.stringify(held));
+
+await call('/api/admin/config', { method: 'PATCH', body: { bountyHoldMinutes: 0 }, admin });
+check('без удержания розыск уходит к новому лидеру', (await wantedOf(watcher))?.nickname === runnerUp.nickname);
+
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 40 }, admin });
+check('розыск вернулся к вышедшему вперёд', (await wantedOf(watcher))?.nickname === leader.nickname);
+
+// Награду берёт любой, а не только охотник, — и промах здесь не портит контракт.
+await sleep(300);
+raw = await readState();
+const chaser = crew.find((c) => byToken(c.token).targetId !== leader.id && c.id !== leader.id);
+const contractBefore = byToken(chaser.token).targetId;
+const chaserTarget = crew.find((c) => c.id === contractBefore);
+const wrongGuess = crew.find((c) => c.id !== leader.id && c.id !== chaser.id && c.id !== chaserTarget.id);
+
+const bountyMiss = await call('/api/shoot', {
+  method: 'POST',
+  body: { playerId: wrongGuess.id, bounty: true },
+  token: chaser.token,
+});
+check('промах в розыске штрафует как обычный', bountyMiss.data.points === -3, JSON.stringify(bountyMiss.data));
+check('промах в розыске не тратит попытку контракта', !bountyMiss.data.state.me.attempts.includes(wrongGuess.id));
+check('промах в розыске записан отдельно', bountyMiss.data.state.me.bountyAttempts.includes(wrongGuess.id));
+
+// Выстрел за награду говорит только «это разыскиваемый». Если под руку попала
+// собственная цель — это всё равно промах, попадание себе так не выпросить.
+const ownTarget = await call('/api/shoot', {
+  method: 'POST',
+  body: { playerId: chaserTarget.id, bounty: true },
+  token: chaser.token,
+});
+check('своя цель не превращает розыск в попадание', ownTarget.data.result === 'miss', JSON.stringify(ownTarget.data));
+check('контракт после такого промаха на месте', ownTarget.data.state.me.attempts.length === 0, JSON.stringify(ownTarget.data.state.me.attempts));
+
+const twice = await call('/api/shoot', { method: 'POST', body: { playerId: wrongGuess.id, bounty: true }, token: chaser.token });
+check('дважды по одному в розыске не стреляют', twice.data.code === 'already_tried', JSON.stringify(twice.data));
+
+const selfBounty = await call('/api/shoot', { method: 'POST', body: { playerId: runnerUp.id, bounty: true }, token: leader.token });
+check('награду за себя не получить', selfBounty.data.code === 'self_bounty', JSON.stringify(selfBounty.data));
+
+const leaderScoreBefore = (await call('/api/me', { token: leader.token })).data.me.score;
+const claim = await call('/api/shoot', { method: 'POST', body: { playerId: leader.id, bounty: true }, token: chaser.token });
+check('награда за верную догадку выплачена', claim.data.result === 'bounty' && claim.data.points === 15, JSON.stringify(claim.data));
+
+await sleep(300);
+raw = await readState();
+check(
+  'контракт охотника за наградой не тронут',
+  byToken(chaser.token).targetId === contractBefore,
+  `${contractBefore} -> ${byToken(chaser.token).targetId}`
+);
+check(
+  'разыскиваемый очков не теряет',
+  (await call('/api/me', { token: leader.token })).data.me.score === leaderScoreBefore,
+  `${leaderScoreBefore} -> ${(await call('/api/me', { token: leader.token })).data.me.score}`
+);
+check('после награды розыск снят', (await wantedOf(watcher)) === null);
+
+const pauseView = await call('/api/admin/state', { admin });
+check('пульт показывает паузу розыска', pauseView.data.wantedPauseUntil > Date.now(), JSON.stringify(pauseView.data.wantedPauseUntil));
+check('пульт видит, кем был разыскиваемый', pauseView.data.events.some((e) => e.type === 'bounty_claimed'));
+
+// Салун: говорят никнеймами, реальные имена не всплывают
+const said = await call('/api/chat', { method: 'POST', body: { text: 'Я видел алый круг у бара' }, token: runnerUp.token });
+check('сообщение уходит в салун', said.data.nickname === runnerUp.nickname, JSON.stringify(said.data));
+
+const heard = await call('/api/me', { token: watcher.token });
+check('сообщение видно другим', heard.data.chat.some((m) => m.text === 'Я видел алый круг у бара'));
+check(
+  'в салуне не видно реальных имён',
+  heard.data.chat.every((m) => !CREW.some(([name]) => JSON.stringify(m).includes(name))),
+  JSON.stringify(heard.data.chat)
+);
+check('сообщение подписано никнеймом', heard.data.chat.every((m) => Object.keys(m).sort().join() === 'at,id,nickname,text'));
+
+const tooFast = await call('/api/chat', { method: 'POST', body: { text: 'И ещё кое-что' }, token: runnerUp.token });
+check('частить в салуне не дают', tooFast.data.code === 'too_fast', JSON.stringify(tooFast.data));
+
+const empty = await call('/api/chat', { method: 'POST', body: { text: '   ' }, token: watcher.token });
+check('пустое сообщение не отправляется', empty.data.code === 'empty_message', JSON.stringify(empty.data));
+
+const chatAdmin = await call('/api/admin/state', { admin });
+const toDelete = chatAdmin.data.chat.find((m) => m.text === 'Я видел алый круг у бара');
+check('ведущий видит автора сообщения по имени', toDelete?.name === runnerUp.name, JSON.stringify(toDelete));
+
+await call(`/api/admin/chat/${toDelete.id}`, { method: 'DELETE', admin });
+const afterDelete = await call('/api/me', { token: watcher.token });
+check('удалённое сообщение исчезает у игроков', !afterDelete.data.chat.some((m) => m.id === toDelete.id));
+
+// Пульс: событий много, имён нет
+check('пульс показывает, что вокруг что-то происходит', afterDelete.data.pulse.length > 0, JSON.stringify(afterDelete.data.pulse));
+check(
+  'пульс не называет реальных имён',
+  !CREW.some(([name]) => JSON.stringify(afterDelete.data.pulse).includes(name)),
+  JSON.stringify(afterDelete.data.pulse)
+);
+// Никнейм в пульсе допустим только там, где он и так объявлен всем, — в розыске.
+check(
+  'пульс не выдаёт никнеймов помимо розыска',
+  afterDelete.data.pulse
+    .filter((e) => !/^(в розыске|награду за)/.test(e.text))
+    .every((e) => !CREW.some(([, nickname]) => e.text.includes(nickname))),
+  JSON.stringify(afterDelete.data.pulse)
+);
+
+// Блокнот: заметки личные и попадают в поиск по списку
+const noted = await call('/api/note', { method: 'POST', body: { playerId: marked.id, text: 'алый круг, внутри крест' }, token: watcher.token });
+check('заметка сохраняется', noted.data.note === 'алый круг, внутри крест', JSON.stringify(noted.data));
+check(
+  'заметка видна в списке рядом с именем',
+  noted.data.state.roster.find((p) => p.id === marked.id)?.note === 'алый круг, внутри крест'
+);
+
+const strangerView = await call('/api/me', { token: runnerUp.token });
+check(
+  'чужие заметки не видны',
+  strangerView.data.roster.every((p) => p.note === ''),
+  JSON.stringify(strangerView.data.roster)
+);
+
+const selfNote = await call('/api/note', { method: 'POST', body: { playerId: watcher.id, text: 'это я' }, token: watcher.token });
+check('заметку о себе не ведут', selfNote.data.code === 'self_note', JSON.stringify(selfNote.data));
+
+const erased = await call('/api/note', { method: 'POST', body: { playerId: marked.id, text: '' }, token: watcher.token });
+check('пустая заметка стирает прежнюю', erased.data.state.roster.find((p) => p.id === marked.id)?.note === '');
+
 // Тест крутил темп игры и наплодил игроков — возвращаем сервер в исходное состояние.
 await call('/api/admin/config', {
   method: 'PATCH',
-  body: { shotCooldownSeconds: 120, defenseCooldownMinutes: 60, ammoStart: 0, ammoMax: 3 },
+  body: { shotCooldownSeconds: 120, ammoStart: 0, ammoMax: 3, bountyHoldMinutes: 20 },
   admin,
 });
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });

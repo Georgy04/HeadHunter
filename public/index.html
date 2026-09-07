@@ -93,6 +93,13 @@
       <main class="view" id="view-home">
         <div id="inbox" class="inbox"></div>
 
+        <!-- Плакат розыска: виден всем, пока лидер табло один. -->
+        <div class="card wanted hidden" id="wanted-card">
+          <div class="card-label">Разыскивается</div>
+          <div class="target" id="wanted-nickname">—</div>
+          <p class="muted small" id="wanted-note"></p>
+        </div>
+
         <div class="card contract">
           <div class="card-label">Ваша цель</div>
           <div class="target" id="target-nickname">—</div>
@@ -130,14 +137,16 @@
       </main>
 
       <main class="view hidden" id="view-shoot">
-        <div class="card">
-          <div class="card-label">Выстрел</div>
-          <p class="muted small">
-            Выберите человека, который, по-вашему, и есть <b id="shoot-target">—</b>.
-            Попадание <b id="shoot-hit">+10</b>, промах <b id="shoot-miss">−3</b>. Можно не стрелять и подождать подсказок.
-          </p>
+        <!-- Один список, два смысла: по контракту или за награду в розыске. -->
+        <div class="seg hidden" id="shoot-mode">
+          <button class="seg-btn active" data-mode="contract">По контракту</button>
+          <button class="seg-btn" data-mode="bounty">За награду</button>
         </div>
-        <input class="search" id="search-shoot" placeholder="Поиск по имени" />
+        <div class="card">
+          <div class="card-label" id="shoot-label">Выстрел</div>
+          <p class="muted small" id="shoot-note">Загружаем список…</p>
+        </div>
+        <input class="search" id="search-shoot" placeholder="Поиск по имени или заметке" />
         <div class="people" id="list-shoot"></div>
       </main>
 
@@ -152,8 +161,37 @@
           </p>
           <p class="muted small" id="defense-status"></p>
         </div>
-        <input class="search" id="search-defense" placeholder="Поиск по имени" />
+        <input class="search" id="search-defense" placeholder="Поиск по имени или заметке" />
         <div class="people" id="list-defense"></div>
+      </main>
+
+      <main class="view hidden" id="view-saloon">
+        <div class="card">
+          <div class="card-label">Салун</div>
+          <p class="muted small">
+            Общий зал. Подписываетесь никнеймом, поэтому можно и хвастаться, и врать —
+            настоящее имя никто не увидит.
+          </p>
+          <div class="code-row">
+            <input id="input-chat" maxlength="200" placeholder="Сказать всем" />
+            <button class="btn" id="btn-chat">Сказать</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Разговоры</div>
+          <ul class="chat" id="chat-list">
+            <li class="muted small">Пока тихо</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Что происходит</div>
+          <ul class="pulse" id="pulse-list">
+            <li class="muted small">Пока ничего</li>
+          </ul>
+          <p class="muted small">Без имён: кто именно — выясняйте сами.</p>
+        </div>
       </main>
 
       <main class="view hidden" id="view-board">
@@ -163,10 +201,11 @@
         </div>
       </main>
 
-      <nav class="tabbar">
+      <nav class="tabbar tabbar-5">
         <button class="tab active" data-view="home">Цель</button>
         <button class="tab" data-view="shoot">Выстрел</button>
         <button class="tab" data-view="defense">Защита</button>
+        <button class="tab" data-view="saloon">Салун</button>
         <button class="tab" data-view="board">Табло</button>
       </nav>
     </section>

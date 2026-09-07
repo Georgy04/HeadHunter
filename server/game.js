@@ -121,7 +121,10 @@ export function registerPlayer(name, nickname, pin) {
     guardAgainst: null,
     guardSetAt: 0,
     identifiedHunters: [],
-    lastDefenseAt: 0,
+    bountyRound: 0,
+    bountyAttempts: [],
+    notes: {},
+    lastChatAt: 0,
     usedCodes: [],
     inbox: [],
     log: [],
@@ -327,6 +330,8 @@ export function startGame() {
   state.game.status = 'running';
   state.game.startedAt = Date.now();
   state.game.finishedAt = null;
+  state.game.wanted = null;
+  state.game.wantedPauseUntil = 0;
   logEvent('game_started', { players: ring.length });
   save();
 }
@@ -368,13 +373,117 @@ function requireRunning() {
   if (state.game.status !== 'running') throw new GameError('Игра сейчас не идёт', 409, 'not_running');
 }
 
+// --- Розыск ------------------------------------------------------------------
+
+/**
+ * Лидер табло попадает в розыск: его никнейм и награда видны всем, и стрелять в
+ * него может каждый, а не только его охотник. Имя не объявляется намеренно —
+ * иначе награду забирал бы тот, у кого просто оказался патрон, а так двадцать
+ * девять человек получают общую задачу вычислить одного.
+ */
+function soleLeader() {
+  const active = activePlayers();
+  if (active.length < 2) return null;
+  const best = Math.max(...active.map((p) => p.score));
+  // На нуле лидера нет: в начале игры все равны, и розыск был бы случайным.
+  if (best <= 0) return null;
+  const leaders = active.filter((p) => p.score === best);
+  // Двое наверху — розыска нет: игра не должна выбирать между ними жребием.
+  return leaders.length === 1 ? leaders[0] : null;
+}
+
+export function refreshWanted(now = Date.now()) {
+  const game = state.game;
+  const clear = (reason) => {
+    if (!game.wanted) return;
+    const previous = state.players[game.wanted.playerId];
+    if (previous) notify(previous, 'wanted_off', 'Розыск с вас снят.');
+    logEvent('wanted_cleared', { nickname: game.wanted.nickname, reason });
+    game.wanted = null;
+    save();
+  };
+
+  if (game.status !== 'running') return clear('game_stopped');
+  if ((game.wantedPauseUntil ?? 0) > now) return clear('pause');
+
+  // Объявление держится не меньше `bountyHoldMinutes`, даже если лидер за это время
+  // сменился. Иначе розыск мигал бы: ведущий начисляет очки за активности пачками,
+  // и наверху табло за минуту успевает побывать полдюжины человек. Мигающее
+  // объявление хуже отсутствующего — за ним не успеть, а тому, кого объявили и
+  // тут же отменили, механика просто непонятна.
+  if (game.wanted && now - game.wanted.since < Math.max(0, state.config.bountyHoldMinutes) * 60_000) return;
+
+  const leader = soleLeader();
+  if (!leader) return clear('no_leader');
+  if (game.wanted?.playerId === leader.id) return;
+
+  const previous = game.wanted ? state.players[game.wanted.playerId] : null;
+  if (previous) notify(previous, 'wanted_off', 'Розыск с вас снят: наверху табло теперь другой.');
+
+  game.wanted = {
+    playerId: leader.id,
+    nickname: leader.nickname,
+    bounty: state.config.bountyPoints,
+    since: now,
+  };
+  notify(
+    leader,
+    'wanted',
+    `Вы в розыске. Ваш никнейм объявлен всем, награда за вашу голову — ${state.config.bountyPoints}. Стрелять в вас теперь может любой.`
+  );
+  logEvent('wanted_declared', { nickname: leader.nickname, bounty: state.config.bountyPoints });
+  save();
+}
+
+/** Награда приходит сверху: разыскиваемый ничего не теряет, деньги на аукцион не сгорают. */
+function payBounty(player, victim, now) {
+  const points = state.config.bountyPoints;
+  player.score += points;
+  state.game.wanted = null;
+  state.game.wantedPauseUntil = now + Math.max(0, state.config.bountyPauseMinutes) * 60_000;
+
+  notify(
+    victim,
+    'bounty',
+    `Награду за вашу голову забрали: вас вычислили, пока вы были в розыске. Очки при этом не тронуты.`
+  );
+  logEvent('bounty_claimed', {
+    playerId: player.id,
+    nickname: player.nickname,
+    victimNickname: victim.nickname,
+    points,
+  });
+  return points;
+}
+
 // --- Выстрел -----------------------------------------------------------------
 
-export function shoot(player, targetPlayerId) {
+export function shoot(player, targetPlayerId, { bounty = false } = {}) {
   const now = Date.now();
   requireRunning();
   if (!player.slotId) throw new GameError('Сначала получите бейдж у ведущего', 409, 'no_badge');
-  if (!player.targetId) throw new GameError('У вас пока нет контракта', 409, 'no_target');
+
+  refreshWanted(now);
+  const wanted = state.game.wanted;
+
+  const victim = state.players[targetPlayerId];
+  if (!victim || !victim.slotId) throw new GameError('Такого участника нет в игре', 404, 'no_player');
+  if (victim.id === player.id) throw new GameError('В себя стрелять не надо', 400, 'self_shot');
+
+  // Выстрел за награду — это заявление «вот этот человек и есть разыскиваемый»,
+  // и промах в нём остаётся промахом, даже если под руку попала собственная цель:
+  // про неё игрок ничего не утверждал. А вот когда разыскиваемый и есть ваша цель,
+  // считаем выстрел контрактным: там начислят и очки за попадание, и награду.
+  const asBounty = bounty && !(victim.id === player.targetId && wanted?.playerId === victim.id);
+
+  if (asBounty) {
+    if (!wanted) throw new GameError('Сейчас никто не в розыске', 409, 'no_wanted');
+    if (wanted.playerId === player.id) {
+      throw new GameError('В розыске вы сами — награду за себя не получить', 400, 'self_bounty');
+    }
+  } else if (!player.targetId) {
+    throw new GameError('У вас пока нет контракта', 409, 'no_target');
+  }
 
   refreshAmmo(player, now);
   if (player.ammo < 1) throw new GameError('Патроны кончились. Дождитесь перезарядки.', 409, 'no_ammo');
@@ -382,11 +491,21 @@ export function shoot(player, targetPlayerId) {
     throw new GameError(`Ствол ещё горячий: ${Math.ceil((player.cooldownUntil - now) / 60_000)} мин`, 409, 'cooldown');
   }
 
-  const victim = state.players[targetPlayerId];
-  if (!victim || !victim.slotId) throw new GameError('Такого участника нет в игре', 404, 'no_player');
-  if (victim.id === player.id) throw new GameError('В себя стрелять не надо', 400, 'self_shot');
-  if (player.attempts.includes(victim.id)) {
-    throw new GameError('По этому участнику вы уже стреляли в рамках текущего контракта', 409, 'already_tried');
+  // У контракта свой список отработанных вариантов, у каждого объявления розыска —
+  // свой: промах в охоте за наградой не должен вычёркивать человека из контракта.
+  if (asBounty && player.bountyRound !== wanted.since) {
+    player.bountyRound = wanted.since;
+    player.bountyAttempts = [];
+  }
+  const tried = asBounty ? (player.bountyAttempts ??= []) : player.attempts;
+  if (tried.includes(victim.id)) {
+    throw new GameError(
+      asBounty
+        ? 'По этому участнику вы уже стреляли в этом розыске'
+        : 'По этому участнику вы уже стреляли в рамках текущего контракта',
+      409,
+      'already_tried'
+    );
   }
 
   player.ammo -= 1;
@@ -395,6 +514,33 @@ export function shoot(player, targetPlayerId) {
 
   const entry = { at: now, targetName: victim.name, points: 0 };
   let outcome;
+
+  if (asBounty) {
+    if (victim.id === wanted.playerId) {
+      const points = payBounty(player, victim, now);
+      entry.result = 'bounty';
+      entry.points = points;
+      entry.targetNickname = victim.nickname;
+      outcome = { result: 'bounty', points, victimNickname: victim.nickname };
+    } else {
+      const penalty = state.config.missPenalty;
+      player.score -= penalty;
+      player.misses += 1;
+      player.bountyAttempts.push(victim.id);
+      entry.result = 'miss';
+      entry.points = -penalty;
+      if (state.config.notifyVictimOnMiss) {
+        notify(victim, 'miss', 'По вам стреляли и промахнулись: кто-то принял вас за разыскиваемого.');
+      }
+      logEvent('bounty_miss', { playerId: player.id, nickname: player.nickname, penalty });
+      outcome = { result: 'miss', points: -penalty };
+    }
+
+    player.log.unshift(entry);
+    if (player.log.length > 50) player.log.length = 50;
+    save();
+    return { ...outcome, cooldownUntil: player.cooldownUntil, ammo: player.ammo };
+  }
 
   if (victim.id !== player.targetId) {
     const penalty = state.config.missPenalty;
@@ -447,8 +593,11 @@ export function shoot(player, targetPlayerId) {
       newTargetNickname: player.targetId ? state.players[player.targetId].nickname : null,
     };
   } else {
-    const points = state.config.hitPoints;
-    player.score += points;
+    let points = state.config.hitPoints;
+    // Цель оказалась в розыске — награда идёт сверх очков за контракт.
+    const alsoWanted = wanted?.playerId === victim.id ? payBounty(player, victim, now) : 0;
+    points += alsoWanted;
+    player.score += state.config.hitPoints;
     player.hits += 1;
     entry.result = 'hit';
     entry.points = points;
@@ -462,6 +611,7 @@ export function shoot(player, targetPlayerId) {
     outcome = {
       result: 'hit',
       points,
+      bounty: alsoWanted,
       victimNickname: victim.nickname,
       newTargetNickname: player.targetId ? state.players[player.targetId].nickname : null,
     };
@@ -643,6 +793,8 @@ export function removePlayer(playerId) {
   if (reserved) reserved.reservedBy = null;
   delete state.players[playerId];
 
+  if (state.game.wanted?.playerId === playerId) state.game.wanted = null;
+
   activePlayers().forEach((p) => {
     if (p.targetId === playerId) assignTarget(p);
     if (p.guardAgainst === playerId) {
@@ -655,6 +807,87 @@ export function removePlayer(playerId) {
   save();
 }
 
+// --- Салун: общий чат и обезличенный пульс -----------------------------------
+
+const CHAT_LIMIT = 200;
+const CHAT_PAUSE_MS = 4000;
+
+/** Сообщения подписаны никнеймом: это позволяет и хвастаться, и врать, не выдавая себя. */
+export function postChat(player, rawText) {
+  requireRunning();
+  if (!player.slotId) throw new GameError('Сначала получите бейдж у ведущего', 409, 'no_badge');
+
+  const text = norm(rawText).slice(0, 200);
+  if (text.length < 1) throw new GameError('Пустое сообщение отправлять некуда', 400, 'empty_message');
+
+  const now = Date.now();
+  if (now - (player.lastChatAt ?? 0) < CHAT_PAUSE_MS) {
+    throw new GameError('Слишком часто. Подождите пару секунд.', 429, 'too_fast');
+  }
+
+  player.lastChatAt = now;
+  state.chat.push({ id: newId(4), at: now, playerId: player.id, nickname: player.nickname, text });
+  if (state.chat.length > CHAT_LIMIT) state.chat.splice(0, state.chat.length - CHAT_LIMIT);
+  save();
+  return { at: now, nickname: player.nickname, text };
+}
+
+export function deleteChatMessage(id) {
+  const index = state.chat.findIndex((m) => m.id === id);
+  if (index === -1) throw new GameError('Сообщение не найдено', 404, 'no_message');
+  const [removed] = state.chat.splice(index, 1);
+  logEvent('chat_removed', { nickname: removed.nickname });
+  save();
+  return removed;
+}
+
+/** Игроку — только никнейм и текст: связку с реальным именем видит один ведущий. */
+const chatView = () => state.chat.slice(-60).map(({ id, at, nickname, text }) => ({ id, at, nickname, text }));
+
+/**
+ * Пульс — обезличенная лента для игроков: без неё человек не знает, идёт ли вокруг
+ * хоть что-то. Имена и никнеймы здесь не звучат, кроме розыска, который публичен
+ * по замыслу.
+ */
+const PULSE = {
+  hit: () => 'кого-то подстрелили',
+  miss: () => 'кто-то выстрелил и промахнулся',
+  bounty_miss: () => 'кто-то промахнулся в охоте за наградой',
+  blocked: () => 'чья-то защита сработала: контракт снят',
+  code_redeemed: () => 'кто-то получил подсказку за активность',
+  badge_issued: () => 'в игру вошёл новый участник',
+  game_started: (e) => `игра началась, участников ${e.players}`,
+  wanted_declared: (e) => `в розыске: ${e.nickname}, награда ${e.bounty}`,
+  wanted_cleared: () => 'розыск снят',
+  bounty_claimed: (e) => `награду за ${e.victimNickname} забрали`,
+};
+
+// Лента событий хранится новыми вперёд, поэтому берём начало, а не конец.
+const pulse = () =>
+  state.events
+    .filter((e) => PULSE[e.type])
+    .slice(0, 25)
+    .map((e) => ({ at: e.at, text: PULSE[e.type](e) }));
+
+// --- Блокнот -----------------------------------------------------------------
+
+/**
+ * Заметка против имени: за двенадцать часов игрок увидит десятки бейджей и всё
+ * перезабудет. Текст свободный, потому что поиск по списку ищет и по нему: пометив
+ * «алый круг», человек потом находит всех помеченных так одним словом.
+ */
+export function setNote(player, otherId, rawText) {
+  if (!state.players[otherId]) throw new GameError('Такого участника нет в игре', 404, 'no_player');
+  if (otherId === player.id) throw new GameError('Заметку о себе оставлять незачем', 400, 'self_note');
+
+  player.notes ??= {};
+  const text = norm(rawText).slice(0, 40);
+  if (text) player.notes[otherId] = text;
+  else delete player.notes[otherId];
+  save();
+  return { playerId: otherId, note: text };
+}
+
 // --- Представления -----------------------------------------------------------
 
 export const emblemSvg = (slot, options) => renderEmblem(slot.emblem, options);
@@ -665,16 +898,21 @@ export function board() {
     .sort((a, b) => b.score - a.score || b.hits - a.hits || a.nickname.localeCompare(b.nickname));
 }
 
-/** Список реальных имён — по нему стреляют и в нём же ищут своего охотника. */
-export function roster() {
+/**
+ * Список реальных имён — по нему стреляют и в нём же ищут своего охотника.
+ * Заметки из блокнота идут рядом с именем: они личные, у каждого свои.
+ */
+export function roster(player = null) {
+  const notes = player?.notes ?? {};
   return activePlayers()
-    .map((p) => ({ id: p.id, name: p.name }))
+    .map((p) => ({ id: p.id, name: p.name, note: notes[p.id] ?? '' }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
 export function playerView(player) {
   const now = Date.now();
   refreshAmmo(player, now);
+  refreshWanted(now);
   player.lastSeenAt = now;
 
   const slot = slotById(player.slotId);
@@ -690,9 +928,21 @@ export function playerView(player) {
       hitPoints: state.config.hitPoints,
       missPenalty: state.config.missPenalty,
       defensePoints: state.config.defensePoints,
+      bountyPoints: state.config.bountyPoints,
       ammoMax: state.config.ammoMax,
       ammoRegenMinutes: state.config.ammoRegenMinutes,
     },
+    // Розыск публичен: никнейм и награда видны всем, имя — нет. Разыскиваемый
+    // узнаёт себя по флагу, остальные видят задачу.
+    wanted: state.game.wanted
+      ? {
+          nickname: state.game.wanted.nickname,
+          bounty: state.game.wanted.bounty,
+          since: state.game.wanted.since,
+          isMe: state.game.wanted.playerId === player.id,
+          isMyTarget: state.game.wanted.playerId === player.targetId,
+        }
+      : null,
     me: {
       id: player.id,
       name: player.name,
@@ -719,11 +969,14 @@ export function playerView(player) {
         guardSetAt: player.guardSetAt ?? 0,
         blocked: player.identifiedHunters.length,
       },
+      bountyAttempts: player.bountyAttempts ?? [],
       log: player.log.slice(0, 20),
       inbox: player.inbox.slice(0, 10),
     },
     roster: roster(player),
     board: board(),
+    pulse: pulse(),
+    chat: chatView(),
     serverTime: now,
   };
 }
@@ -732,10 +985,22 @@ export function adminView() {
   const issued = state.slots.filter((s) => s.claimedBy).length;
   const reserved = state.slots.filter((s) => s.reservedBy).length;
   const counts = hunterCounts();
+  refreshWanted();
+  const wanted = state.game.wanted ? state.players[state.game.wanted.playerId] : null;
 
   return {
     game: state.game,
     config: state.config,
+    // Ведущему розыск виден с реальным именем: он объявляет его голосом на площадке.
+    wanted: wanted
+      ? { name: wanted.name, nickname: wanted.nickname, bounty: state.game.wanted.bounty, since: state.game.wanted.since }
+      : null,
+    wantedPauseUntil: (state.game.wantedPauseUntil ?? 0) > Date.now() ? state.game.wantedPauseUntil : 0,
+    // Чат ведущий видит с именами: анонимность нужна против игроков, не против него.
+    chat: state.chat.slice(-40).map((m) => ({
+      ...m,
+      name: state.players[m.playerId]?.name ?? '—',
+    })),
     stats: {
       slots: state.slots.length,
       issued,

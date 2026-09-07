@@ -55,7 +55,10 @@ PIN из четырёх цифр, придуманный при регистра
 
 ```
 game     { status, title }
-rules    { hitPoints, missPenalty, defensePoints, ammoMax, ammoRegenMinutes }
+rules    { hitPoints, missPenalty, defensePoints, bountyPoints, ammoMax,
+           ammoRegenMinutes }
+wanted   null или { nickname, bounty, since, isMe, isMyTarget }
+                                               розыск: никнейм публичен, имя нет
 me
   id, name, nickname, score, hits, misses
   hasBadge                                     false, пока ведущий не выдал бейдж
@@ -70,22 +73,34 @@ me
                                                своя ставка защиты и сколько
                                                охотников она уже остановила
   log[], inbox[]
-roster[] { id, name }                          список имён: для выстрела и защиты
+roster[] { id, name, note }                    список имён: для выстрела и защиты,
+                                               note — своя заметка из блокнота
 board[]  { nickname, score, hits, misses }     табло
+pulse[]  { at, text }                          обезличенная лента событий
+chat[]   { id, at, nickname, text }            салун: подписан никнеймом
 ```
 
 Связки «никнейм ↔ имя ↔ эмблема» в ответе нет и быть не должно: `target` содержит
-только никнейм, `roster` — только имена, `board` — только никнеймы. Это правило
-важнее удобства, см. [architecture.md](architecture.md).
+только никнейм, `roster` — только имена, `board` — только никнеймы, `chat` и
+`pulse` — тоже без имён. Это правило важнее удобства, см.
+[architecture.md](architecture.md).
 
 ### POST /api/shoot
 
-Тело: `{ playerId }` — id из `roster`. Ответ: `{ result, points, cooldownUntil,
-ammo, state }`, где `result` — `hit`, `miss` или `blocked`. При попадании
-добавляются `victimNickname` и `newTargetNickname`.
+Тело: `{ playerId, bounty }` — id из `roster`. Ответ: `{ result, points,
+cooldownUntil, ammo, state }`, где `result` — `hit`, `miss`, `blocked` или
+`bounty`. При попадании добавляются `victimNickname`, `newTargetNickname` и
+`bounty` (награда, если цель была в розыске); при `blocked` — `newTargetNickname`
+(контракт провален, цель заменена).
+
+Флаг `bounty: true` меняет смысл выстрела: это заявление «этот человек и есть
+разыскиваемый», а не «это моя цель». Промах в нём штрафует так же, но
+вычёркивается в отдельном списке (`bountyAttempts`) и контракта не касается —
+даже если под руку попала собственная цель. Исключение одно: когда разыскиваемый и
+есть ваша цель, выстрел считается контрактным и приносит и очки, и награду.
 
 Отказы: `no_badge`, `no_target`, `no_ammo`, `cooldown`, `no_player`, `self_shot`,
-`already_tried`.
+`already_tried`, `no_wanted` (розыска сейчас нет), `self_bounty` (в розыске вы сами).
 
 ### POST /api/defend
 
@@ -107,6 +122,23 @@ hintsLeft, state }`.
 Отказы: `no_code`, `code_used` (этот игрок уже вводил), `code_spent` (кончились
 использования), `hints_done` (подсказки по цели исчерпаны — код не сгорает).
 
+### POST /api/chat
+
+Сообщение в салун. Тело: `{ text }` (до 200 знаков). Ответ: `{ at, nickname, text,
+state }` — подписывается никнеймом игрока, имя в чат не попадает.
+
+Отказы: `not_running`, `no_badge`, `empty_message`, `too_fast` (429, пауза между
+сообщениями — несколько секунд).
+
+### POST /api/note
+
+Заметка в блокноте про другого участника. Тело: `{ playerId, text }` (до 40
+знаков; пустая строка стирает заметку). Ответ: `{ playerId, note, state }`.
+
+Заметки личные: они приходят только их автору, внутри `roster`.
+
+Отказы: `no_player`, `self_note`.
+
 ### POST /api/inbox/read
 
 Помечает входящие прочитанными. Ответ: `{ ok: true }`.
@@ -123,6 +155,11 @@ hintsLeft, state }`.
 имя, никнейм, назначенная эмблема, код, время регистрации), таблица игроков с
 эмблемами и целями, коды, лента событий. Тут связки видны — это пульт ведущего.
 
+Розыск приходит двумя полями: `wanted` — `{ name, nickname, bounty, since }` с
+настоящим именем, чтобы ведущий знал, о ком речь, и `wantedPauseUntil` — до какого
+момента розыск молчит после выплаты награды (0, если не молчит). Салун — в `chat`,
+где к каждому сообщению добавлено `name` автора.
+
 ### POST /api/admin/slots
 
 Тело: `{ count, append }` (count 1–300). Выпускает набор бейджей со
@@ -137,6 +174,10 @@ hintsLeft, state }`.
 
 Тело: `{ count, points, grantsHint, maxUses, note }`. Создаёт коды за активности.
 Ответ: `{ created: [коды], ...состояние }`.
+
+### DELETE /api/admin/chat/:id
+
+Удаляет сообщение из салуна. Ответ — состояние пульта. Отказ: `no_message`.
 
 ### POST /api/admin/game/:action
 

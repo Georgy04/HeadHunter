@@ -8,6 +8,8 @@ let token = localStorage.getItem(TOKEN_KEY) || '';
 let snapshot = null;
 let pollTimer = null;
 let confirmAction = null;
+// Смысл выстрела: по своему контракту или за награду в розыске.
+let shootMode = 'contract';
 const seenInbox = new Set(JSON.parse(localStorage.getItem('hh_seen') || '[]'));
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -203,9 +205,6 @@ function apply(data) {
   $('top-score').textContent = me.score;
 
   $('target-nickname').textContent = me.target ? me.target.nickname : 'ждём начала игры';
-  $('shoot-target').textContent = me.target ? me.target.nickname : '—';
-  $('shoot-hit').textContent = `+${rules.hitPoints}`;
-  $('shoot-miss').textContent = `−${rules.missPenalty}`;
   $('defense-points').textContent = `+${rules.defensePoints}`;
 
   $('my-emblem').innerHTML = me.emblem.svg;
@@ -215,9 +214,11 @@ function apply(data) {
   renderAmmo(me, rules);
   renderLog(me);
   renderInbox(me.inbox);
-  renderPeople(data.roster, me);
+  renderWanted(data);
+  renderPeople(data.roster, me, data.wanted);
   renderDefense(me);
   renderBoard(data.board, me.nickname);
+  renderSaloon(data, me.nickname);
 }
 
 /** Два перехода игрок может пропустить, если экран лежит в кармане: сообщаем о них. */
@@ -232,6 +233,77 @@ function announce(prev, data) {
     toast('Игра началась. Ваша цель уже в приложении.', 6000);
   }
 }
+
+/**
+ * Плакат розыска и смысл вкладки «Выстрел». Награду забирают из того же списка
+ * имён, поэтому переключатель показываем только когда охота за наградой вообще
+ * возможна: себя не выдать, а свою цель выгоднее брать по контракту.
+ */
+function renderWanted(data) {
+  const wanted = data.wanted;
+  const card = $('wanted-card');
+  const seg = $('shoot-mode');
+
+  if (!wanted) {
+    card.classList.add('hidden');
+    seg.classList.add('hidden');
+    shootMode = 'contract';
+    renderShootNote(data);
+    return;
+  }
+
+  card.classList.remove('hidden');
+  $('wanted-nickname').textContent = wanted.nickname;
+  $('wanted-note').textContent = wanted.isMe
+    ? `Разыскивают вас. Награда за вашу голову — ${wanted.bounty}, и стрелять в вас теперь может любой. Имя не объявлено: пока вас не вычислили, вы в безопасности.`
+    : wanted.isMyTarget
+      ? `Это ваша цель. Стреляйте по контракту — получите и очки за попадание, и награду ${wanted.bounty}.`
+      : `Награда ${wanted.bounty} тому, кто первым назовёт, кто это. Стрелять может любой — ищите на вкладке «Выстрел».`;
+
+  const canHunt = !wanted.isMe && !wanted.isMyTarget;
+  seg.classList.toggle('hidden', !canHunt);
+  if (!canHunt) shootMode = 'contract';
+  renderShootNote(data);
+}
+
+function renderShootNote(data) {
+  const { me, rules, wanted } = data;
+  const bounty = shootMode === 'bounty' && wanted;
+
+  $('shoot-mode')
+    .querySelectorAll('.seg-btn')
+    .forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === shootMode));
+
+  $('shoot-label').textContent = bounty ? 'Выстрел за награду' : 'Выстрел';
+  $('shoot-note').innerHTML = bounty
+    ? `Выберите человека, который, по-вашему, и есть <b>${esc(wanted.nickname)}</b>.
+       Награда <b>+${wanted.bounty}</b>, промах <b>−${rules.missPenalty}</b>.
+       Промах здесь не мешает вашему контракту.`
+    : `Выберите человека, который, по-вашему, и есть <b>${esc(me.target ? me.target.nickname : '—')}</b>.
+       Попадание <b>+${rules.hitPoints}</b>, промах <b>−${rules.missPenalty}</b>. Можно не стрелять и подождать подсказок.`;
+}
+
+function renderSaloon(data, myNickname) {
+  const chat = data.chat ?? [];
+  $('chat-list').innerHTML = chat.length
+    ? chat
+        .slice()
+        .reverse()
+        .map(
+          (m) => `<li><span class="when">${clock(m.at)}</span>
+            <span class="who ${m.nickname === myNickname ? 'me' : ''}">${esc(m.nickname)}</span>: ${esc(m.text)}</li>`
+        )
+        .join('')
+    : '<li class="muted small">Пока тихо. Скажите что-нибудь первым.</li>';
+
+  const pulse = data.pulse ?? [];
+  $('pulse-list').innerHTML = pulse.length
+    ? pulse.map((e) => `<li><span class="when">${clock(e.at)}</span> ${esc(e.text)}</li>`).join('')
+    : '<li class="muted small">Пока ничего не произошло</li>';
+}
+
+const clock = (ts) =>
+  new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
 function renderHints(me) {
   $('hints-left').textContent = me.hints.length ? `· осталось ${me.hintsLeft}` : '';
@@ -271,7 +343,8 @@ function renderLog(me) {
   const LABEL = { hit: 'попадание', miss: 'мимо', blocked: 'защита цели', bounty: 'награда за розыск' };
   list.innerHTML = me.log
     .map((entry) => {
-      const extra = entry.result === 'hit' ? ` — это был ${esc(entry.targetNickname ?? '')}` : '';
+      const extra =
+        entry.result === 'hit' || entry.result === 'bounty' ? ` — это был ${esc(entry.targetNickname ?? '')}` : '';
       return `<li>
         <span class="badge-res ${entry.result}">${entry.points > 0 ? '+' : ''}${entry.points || 0}</span>
         <span class="small">${esc(entry.targetName)}<span class="muted"> · ${LABEL[entry.result]}${extra}</span></span>
@@ -304,15 +377,27 @@ $('inbox').addEventListener('click', async () => {
 
 // --- Списки людей -------------------------------------------------------------
 
-function renderPeople(roster, me) {
+function personRow(p, { extra = '', note = '', mark = '' } = {}) {
+  const memo = p.note ? `<span class="memo">${esc(p.note)}</span>` : '';
+  const label = extra ? `<span class="muted small">${esc(extra)}</span>` : '';
+  return `<div class="person ${mark}" data-id="${p.id}" data-name="${esc(p.name)}" data-note="${esc(p.note ?? '')}">
+    <button class="pick" ${extra ? 'disabled' : ''}>${esc(p.name)}${label}${memo}</button>
+    <button class="jot ${p.note ? 'filled' : ''}" title="Заметка">✎</button>
+  </div>`;
+}
+
+function renderPeople(roster, me, wanted) {
   const others = roster.filter((p) => p.id !== me.id);
+  const bounty = shootMode === 'bounty' && wanted;
+  const tried = bounty ? me.bountyAttempts ?? [] : me.attempts;
+
   $('list-shoot').innerHTML = others
-    .map((p) => {
-      const tried = me.attempts.includes(p.id);
-      return `<button class="person ${tried ? 'tried' : ''}" data-id="${p.id}" data-name="${esc(p.name)}" ${
-        tried ? 'disabled' : ''
-      }>${esc(p.name)}${tried ? '<span class="muted small">уже стреляли</span>' : ''}</button>`;
-    })
+    .map((p) =>
+      personRow(p, {
+        extra: tried.includes(p.id) ? 'уже стреляли' : '',
+        mark: tried.includes(p.id) ? 'tried' : '',
+      })
+    )
     .join('');
 
   $('list-defense').innerHTML = others
@@ -328,12 +413,14 @@ function renderPeople(roster, me) {
   applySearch('defense');
 }
 
+/** Ищем и по имени, и по заметке: пометив «алый круг», человек находит потом всех таких. */
 function applySearch(kind) {
   const query = $(`search-${kind}`).value.trim().toLowerCase();
   $(`list-${kind}`)
     .querySelectorAll('.person')
-    .forEach((btn) => {
-      btn.classList.toggle('hidden', Boolean(query) && !btn.dataset.name.toLowerCase().includes(query));
+    .forEach((row) => {
+      const haystack = `${row.dataset.name} ${row.dataset.note}`.toLowerCase();
+      row.classList.toggle('hidden', Boolean(query) && !haystack.includes(query));
     });
 }
 
@@ -372,22 +459,60 @@ $('modal-confirm').addEventListener('click', async () => {
   if (action) await action();
 });
 
-$('list-shoot').addEventListener('click', (event) => {
-  const btn = event.target.closest('.person');
-  if (!btn || !snapshot) return;
-  if (!snapshot.me.target) return toast('Контракт ещё не выдан');
-  if (snapshot.me.ammo < 1) return toast('Патронов нет, ждите перезарядки');
-
+/** Заметка о человеке: короткая строка, по ней же потом работает поиск. */
+function askNote(row) {
   askConfirm(
-    `<div class="card-label">Подтвердите выстрел</div>
-     <p class="center big-name">${esc(btn.dataset.name)}</p>
-     <p class="center">Вы заявляете, что это <b>${esc(snapshot.me.target.nickname)}</b></p>
-     <p class="muted small center">Промах стоит ${snapshot.rules.missPenalty} очков и патрон.</p>`,
+    `<div class="card-label">Заметка</div>
+     <p class="center big-name">${esc(row.dataset.name)}</p>
+     <p class="muted small center">Что вы про него запомнили — например, приметы эмблемы.
+     Заметку видите только вы. Пустая строка стирает.</p>
+     <label class="field" style="margin-top:12px">
+       <input id="note-input" maxlength="40" value="${esc(row.dataset.note)}" placeholder="алый круг, внутри крест" />
+     </label>`,
     async () => {
       try {
-        const res = await api('/api/shoot', { method: 'POST', body: { playerId: btn.dataset.id } });
+        const res = await api('/api/note', {
+          method: 'POST',
+          body: { playerId: row.dataset.id, text: $('note-input')?.value ?? '' },
+        });
         apply(res.state);
-        showShotFlash(res, btn.dataset.name);
+      } catch (err) {
+        toast(err.message, 4000);
+      }
+    }
+  );
+  setTimeout(() => $('note-input')?.focus(), 50);
+}
+
+$('list-shoot').addEventListener('click', (event) => {
+  const row = event.target.closest('.person');
+  if (!row || !snapshot) return;
+  if (event.target.closest('.jot')) return askNote(row);
+  if (event.target.closest('.pick')?.disabled) return;
+
+  const wanted = snapshot.wanted;
+  const bounty = shootMode === 'bounty' && wanted;
+  if (!bounty && !snapshot.me.target) return toast('Контракт ещё не выдан');
+  if (snapshot.me.ammo < 1) return toast('Патронов нет, ждите перезарядки');
+
+  const claim = bounty ? wanted.nickname : snapshot.me.target.nickname;
+  askConfirm(
+    `<div class="card-label">${bounty ? 'Выстрел за награду' : 'Подтвердите выстрел'}</div>
+     <p class="center big-name">${esc(row.dataset.name)}</p>
+     <p class="center">Вы заявляете, что это <b>${esc(claim)}</b></p>
+     <p class="muted small center">${
+       bounty
+         ? `Угадали — награда ${wanted.bounty}. Промах стоит ${snapshot.rules.missPenalty} очков и патрон.`
+         : `Промах стоит ${snapshot.rules.missPenalty} очков и патрон.`
+     }</p>`,
+    async () => {
+      try {
+        const res = await api('/api/shoot', {
+          method: 'POST',
+          body: { playerId: row.dataset.id, bounty },
+        });
+        apply(res.state);
+        showShotFlash(res, row.dataset.name);
       } catch (err) {
         toast(err.message, 4000);
         refresh();
@@ -397,18 +522,20 @@ $('list-shoot').addEventListener('click', (event) => {
 });
 
 $('list-defense').addEventListener('click', (event) => {
-  const btn = event.target.closest('.person');
-  if (!btn || !snapshot) return;
+  const row = event.target.closest('.person');
+  if (!row || !snapshot) return;
+  if (event.target.closest('.jot')) return askNote(row);
+  if (event.target.closest('.pick')?.disabled) return;
 
   askConfirm(
     `<div class="card-label">Выставить защиту</div>
-     <p class="center big-name">${esc(btn.dataset.name)}</p>
+     <p class="center big-name">${esc(row.dataset.name)}</p>
      <p class="center">Вы считаете, что этот человек охотится на вас.</p>
      <p class="muted small center">Ставку можно менять когда угодно, но действует только одна.
      Правильность не покажут — узнаете, если он выстрелит.</p>`,
     async () => {
       try {
-        const res = await api('/api/defend', { method: 'POST', body: { playerId: btn.dataset.id } });
+        const res = await api('/api/defend', { method: 'POST', body: { playerId: row.dataset.id } });
         if (res.state) apply(res.state);
         showDefenseFlash(res);
       } catch (err) {
@@ -417,6 +544,31 @@ $('list-defense').addEventListener('click', (event) => {
       }
     }
   );
+});
+
+$('shoot-mode').addEventListener('click', (event) => {
+  const btn = event.target.closest('.seg-btn');
+  if (!btn || !snapshot) return;
+  shootMode = btn.dataset.mode;
+  renderShootNote(snapshot);
+  renderPeople(snapshot.roster, snapshot.me, snapshot.wanted);
+});
+
+async function sayInChat() {
+  const text = $('input-chat').value.trim();
+  if (!text) return;
+  try {
+    const res = await api('/api/chat', { method: 'POST', body: { text } });
+    $('input-chat').value = '';
+    apply(res.state);
+  } catch (err) {
+    toast(err.message, 4000);
+  }
+}
+
+$('btn-chat').addEventListener('click', sayInChat);
+$('input-chat').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') sayInChat();
 });
 
 $('btn-code').addEventListener('click', async () => {
@@ -442,11 +594,20 @@ function flash(html, ms) {
 }
 
 function showShotFlash(res, name) {
-  if (navigator.vibrate) navigator.vibrate(res.result === 'hit' ? [60, 40, 120] : 200);
-  if (res.result === 'hit') {
+  if (navigator.vibrate) navigator.vibrate(res.result === 'miss' ? 200 : [60, 40, 120]);
+  if (res.result === 'bounty') {
+    flash(
+      `<div class="flash-title hit">НАГРАДА ВАША</div>
+       <div class="flash-sub">${esc(name)} и есть ${esc(res.victimNickname)}. +${res.points} очков.<br />
+       Ваш контракт не тронут — цель осталась прежней.</div>`,
+      4600
+    );
+  } else if (res.result === 'hit') {
     flash(
       `<div class="flash-title hit">ПОПАДАНИЕ</div>
-       <div class="flash-sub">${esc(name)} и есть ${esc(res.victimNickname)}. ${res.points > 0 ? '+' : ''}${res.points} очков.<br />
+       <div class="flash-sub">${esc(name)} и есть ${esc(res.victimNickname)}. ${res.points > 0 ? '+' : ''}${res.points} очков${
+         res.bounty ? `, включая награду ${res.bounty} за розыск` : ''
+       }.<br />
        Новая цель: <b>${esc(res.newTargetNickname ?? '—')}</b></div>`,
       4600
     );
@@ -491,7 +652,7 @@ function renderBoard(rows, myNickname) {
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-    ['home', 'shoot', 'defense', 'board'].forEach((view) => {
+    ['home', 'shoot', 'defense', 'saloon', 'board'].forEach((view) => {
       $(`view-${view}`).classList.toggle('hidden', view !== tab.dataset.view);
     });
     window.scrollTo(0, 0);

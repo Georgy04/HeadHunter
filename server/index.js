@@ -16,6 +16,7 @@ import {
   createCodes,
   createSlots,
   defend,
+  deleteChatMessage,
   emblemSvg,
   grantHint,
   issueBadge,
@@ -23,12 +24,14 @@ import {
   playerByToken,
   playerView,
   players,
+  postChat,
   reassignBadge,
   redeemCode,
   registerPlayer,
   removePlayer,
   resetPin,
   setGameStatus,
+  setNote,
   shoot,
   startGame,
 } from './game.js';
@@ -170,7 +173,8 @@ app.post(
   '/api/shoot',
   handle((req, res) => {
     const player = requirePlayer(req);
-    const outcome = shoot(player, req.body?.playerId);
+    // bounty — выстрел за награду по разыскиваемому, а не по своему контракту.
+    const outcome = shoot(player, req.body?.playerId, { bounty: Boolean(req.body?.bounty) });
     res.json({ ...outcome, state: playerView(player) });
   })
 );
@@ -190,6 +194,24 @@ app.post(
     const player = requirePlayer(req);
     const outcome = redeemCode(player, req.body?.code);
     res.json({ ...outcome, state: playerView(player) });
+  })
+);
+
+app.post(
+  '/api/chat',
+  handle((req, res) => {
+    const player = requirePlayer(req);
+    const message = postChat(player, req.body?.text);
+    res.json({ ...message, state: playerView(player) });
+  })
+);
+
+app.post(
+  '/api/note',
+  handle((req, res) => {
+    const player = requirePlayer(req);
+    const note = setNote(player, req.body?.playerId, req.body?.text);
+    res.json({ ...note, state: playerView(player) });
   })
 );
 
@@ -235,6 +257,15 @@ app.post(
     requireAdmin(req);
     const created = createCodes(req.body ?? {});
     res.json({ created: created.map((c) => c.code), ...adminView() });
+  })
+);
+
+app.delete(
+  '/api/admin/chat/:id',
+  handle((req, res) => {
+    requireAdmin(req);
+    deleteChatMessage(req.params.id);
+    res.json(adminView());
   })
 );
 

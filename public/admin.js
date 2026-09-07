@@ -108,12 +108,61 @@ function render() {
     )
     .join('');
 
+  renderWanted();
+  renderChat();
+
   $('events').innerHTML = data.events
     .map((e) => `<div>${new Date(e.at).toLocaleTimeString('ru-RU')} · ${esc(describeEvent(e))}</div>`)
     .join('');
 
   if (!$('cfg').dataset.filled) renderConfig();
 }
+
+/** Розыск ведущий объявляет голосом, поэтому здесь и никнейм для объявления, и имя для себя. */
+function renderWanted() {
+  const box = $('wanted-box');
+  if (data.wanted) {
+    box.innerHTML = `<div class="wanted-live">Разыскивается <b>«${esc(data.wanted.nickname)}»</b>,
+      награда ${data.wanted.bounty}</div>
+      <div class="muted small">это ${esc(data.wanted.name)} · объявлено в ${new Date(
+      data.wanted.since
+    ).toLocaleTimeString('ru-RU')} · стрелять по нему может любой</div>`;
+    return;
+  }
+  const pause = data.wantedPauseUntil;
+  box.innerHTML = pause
+    ? `<span class="muted">Пауза после награды до ${new Date(pause).toLocaleTimeString('ru-RU')}</span>`
+    : '<span class="muted">Никого: наверху табло нет единственного лидера</span>';
+}
+
+function renderChat() {
+  const list = data.chat ?? [];
+  $('chat-count').textContent = list.length ? `(${list.length})` : '';
+  $('chat-mod').innerHTML = list.length
+    ? list
+        .slice()
+        .reverse()
+        .map(
+          (m) => `<div class="msg">
+            <div><span class="who">${esc(m.nickname)}</span> <span class="real">(${esc(m.name)})</span><br />${esc(m.text)}</div>
+            <button class="mini-btn" data-chat-del="${m.id}">✕</button>
+          </div>`
+        )
+        .join('')
+    : '<div class="muted small">В салуне тихо</div>';
+}
+
+$('chat-mod').addEventListener('click', async (event) => {
+  const btn = event.target.closest('[data-chat-del]');
+  if (!btn) return;
+  try {
+    data = await api(`/api/admin/chat/${btn.dataset.chatDel}`, { method: 'DELETE' });
+    render();
+    toast('Сообщение удалено');
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+});
 
 /**
  * Очередь на выдачу. Ведущий сверяет эмблему на экране с бейджем в руках; код
@@ -175,9 +224,13 @@ function describeEvent(e) {
     case 'player_inserted': return `новый участник встроен в цепочку (контракт «${e.hostNickname}» изменён)`;
     case 'hit': return `${e.nickname} вычислил ${e.victimNickname} (+${e.points})`;
     case 'miss': return `${e.nickname} промахнулся (−${e.penalty})`;
-    case 'blocked': return `${e.nickname} попал по ${e.victimNickname}, но сработала защита`;
-    case 'defense_right': return `${e.nickname} вычислил своего охотника (+${e.points})`;
-    case 'defense_wrong': return `${e.nickname} не угадал охотника`;
+    case 'blocked': return `${e.victimNickname} ждал ${e.nickname} и остановил его (+${e.points}), контракт снят`;
+    case 'guard_set': return `${e.nickname} поставил защиту`;
+    case 'wanted_declared': return `объявлен розыск: «${e.nickname}», награда ${e.bounty}`;
+    case 'wanted_cleared': return `розыск снят (${WANTED_CLEAR_REASON[e.reason] ?? e.reason})`;
+    case 'bounty_claimed': return `${e.nickname} забрал награду за «${e.victimNickname}» (+${e.points})`;
+    case 'bounty_miss': return `${e.nickname} промахнулся в охоте за наградой (−${e.penalty})`;
+    case 'chat_removed': return `сообщение «${e.nickname}» удалено из салуна`;
     case 'code_redeemed': return `${e.nickname} ввёл код ${e.code}`;
     case 'codes_created': return `выпущено кодов: ${e.count}`;
     case 'hint_granted': return `${e.nickname} получил подсказку от ведущего`;
@@ -195,12 +248,20 @@ function describeEvent(e) {
   }
 }
 
+const WANTED_CLEAR_REASON = {
+  game_stopped: 'игра не идёт',
+  pause: 'пауза после награды',
+  no_leader: 'нет единственного лидера',
+};
+
 const CONFIG_LABELS = {
   eventTitle: 'Название игры',
   hitPoints: 'Очков за попадание',
   missPenalty: 'Штраф за промах',
-  defensePoints: 'Очков за угаданного охотника',
-  defenseCooldownMinutes: 'Пауза между защитами, мин',
+  defensePoints: 'Очков за сработавшую защиту',
+  bountyPoints: 'Награда за розыск',
+  bountyHoldMinutes: 'Розыск держится не меньше, мин',
+  bountyPauseMinutes: 'Пауза розыска после награды, мин',
   ammoStart: 'Патронов на старте',
   ammoMax: 'Максимум патронов',
   ammoRegenMinutes: 'Минут на патрон',

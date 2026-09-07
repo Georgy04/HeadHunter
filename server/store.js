@@ -14,7 +14,9 @@ export const DEFAULT_CONFIG = {
   hitPoints: 10,
   missPenalty: 3,
   defensePoints: 8,
-  defenseCooldownMinutes: 60,
+  bountyPoints: 15,
+  bountyHoldMinutes: 20,
+  bountyPauseMinutes: 60,
   ammoStart: 0,
   ammoMax: 3,
   ammoRegenMinutes: 60,
@@ -43,10 +45,11 @@ function emptyState() {
     version: STATE_VERSION,
     adminToken: newId(12),
     config: { ...DEFAULT_CONFIG },
-    game: { status: 'lobby', startedAt: null, finishedAt: null },
+    game: { status: 'lobby', startedAt: null, finishedAt: null, wanted: null, wantedPauseUntil: 0 },
     slots: [],
     players: {},
     codes: [],
+    chat: [],
     events: [],
   };
 }
@@ -68,6 +71,7 @@ function load() {
     }
     parsed.config = { ...DEFAULT_CONFIG, ...parsed.config };
     parsed.codes ??= [];
+    parsed.chat ??= [];
     return parsed;
   } catch (err) {
     if (err.code !== 'ENOENT') {

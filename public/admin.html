@@ -40,6 +40,13 @@
       .pend .acts { display: flex; gap: 6px; }
       .pend .btn { padding: 10px 14px; font-size: 14px; }
       .events div { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+      .chat-mod { max-height: 280px; overflow: auto; font-size: 14px; }
+      .chat-mod .msg { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+      .chat-mod .msg:first-child { border-top: 0; }
+      .chat-mod .who { color: var(--accent); }
+      .chat-mod .real { color: var(--muted); font-size: 12px; }
+      .wanted-live { color: var(--warn); font-size: 15px; }
+      .wanted-live b { font-size: 19px; }
       .qr img { width: 100%; border-radius: 12px; background: #fff; padding: 8px; }
       a.link { color: var(--warn); }
       .offline { color: var(--muted); }
@@ -69,6 +76,12 @@
               <button class="btn" data-action="finish">Финал</button>
               <button class="btn ghost" data-action="reshuffle">Перераздать цели</button>
             </div>
+          </div>
+
+          <!-- Розыск объявляется сам, ведущему он нужен, чтобы крикнуть об этом на площадке. -->
+          <div class="card">
+            <div class="card-label">Розыск</div>
+            <div id="wanted-box" class="muted">—</div>
           </div>
 
           <div class="card">
@@ -137,6 +150,11 @@
               </thead>
               <tbody id="players"></tbody>
             </table>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Салун <span id="chat-count" class="muted"></span></div>
+            <div class="chat-mod" id="chat-mod"></div>
           </div>
 
           <div class="card">
