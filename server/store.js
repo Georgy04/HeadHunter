@@ -24,7 +24,7 @@ export const DEFAULT_CONFIG = {
   wifiPassword: '',
 };
 
-const STATE_VERSION = 4;
+const STATE_VERSION = 5;
 
 export function newId(bytes = 8) {
   return crypto.randomBytes(bytes).toString('hex');

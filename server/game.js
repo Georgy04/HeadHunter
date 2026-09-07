@@ -118,7 +118,8 @@ export function registerPlayer(name, nickname, pin) {
     ammo: state.config.ammoStart,
     ammoRegenAt: Date.now(),
     cooldownUntil: 0,
-    shieldAgainst: null,
+    guardAgainst: null,
+    guardSetAt: 0,
     identifiedHunters: [],
     lastDefenseAt: 0,
     usedCodes: [],
@@ -266,8 +267,6 @@ function hunterCounts() {
   return counts;
 }
 
-export const huntersOf = (playerId) => activePlayers().filter((p) => p.targetId === playerId);
-
 function setTarget(player, targetId) {
   player.targetId = targetId;
   player.attempts = [];
@@ -409,15 +408,44 @@ export function shoot(player, targetPlayerId) {
     }
     logEvent('miss', { playerId: player.id, nickname: player.nickname, penalty });
     outcome = { result: 'miss', points: -penalty };
-  } else if (victim.shieldAgainst === player.id) {
-    // Цель вычислила своего охотника заранее — выстрел уходит в молоко,
-    // но врать стрелку не нужно: он опознал человека верно.
-    victim.shieldAgainst = null;
+  } else if (victim.guardAgainst === player.id) {
+    // Жертва поставила защиту именно на этого охотника и переиграла его: выстрел
+    // не проходит, а контракт снимается. Стрелку врать не нужно — цель он опознал
+    // верно, — но подсказки уходят вместе с контрактом: они про прежнюю эмблему.
+    victim.guardAgainst = null;
+    victim.guardSetAt = 0;
     entry.result = 'blocked';
-    notify(victim, 'defense', 'Ваша защита сработала: охотник выстрелил, но промахнулся мимо вас.');
-    notify(player, 'blocked', 'Цель успела выставить защиту. Опознали верно, но выстрел не прошёл.');
-    logEvent('blocked', { playerId: player.id, nickname: player.nickname, victimNickname: victim.nickname });
-    outcome = { result: 'blocked', points: 0 };
+
+    let points = 0;
+    if (!victim.identifiedHunters.includes(player.id)) {
+      points = state.config.defensePoints;
+      victim.score += points;
+      victim.identifiedHunters.push(player.id);
+    }
+
+    notify(
+      victim,
+      'defense',
+      `Защита сработала: ${player.name} действительно охотился на вас и выстрелил. Выстрел не прошёл, контракт с вас снят.`
+    );
+    notify(
+      player,
+      'blocked',
+      'Цель ждала именно вас: выстрел не прошёл, контракт провален. Вы опознали человека верно, но подсказки начинаются заново с новой целью.'
+    );
+    logEvent('blocked', {
+      playerId: player.id,
+      nickname: player.nickname,
+      victimNickname: victim.nickname,
+      points,
+    });
+
+    assignTarget(player);
+    outcome = {
+      result: 'blocked',
+      points: 0,
+      newTargetNickname: player.targetId ? state.players[player.targetId].nickname : null,
+    };
   } else {
     const points = state.config.hitPoints;
     player.score += points;
@@ -447,46 +475,30 @@ export function shoot(player, targetPlayerId) {
 
 // --- Защита ------------------------------------------------------------------
 
+/**
+ * Защита — не догадка с ответом, а ставка: игрок называет того, кого считает своим
+ * охотником, и меняет её когда захочет. Правильность не сообщается, поэтому тыкать
+ * наугад бессмысленно: случайная ставка не приносит ни очков, ни информации.
+ * Выяснится всё только в момент выстрела — см. `shoot`.
+ */
 export function defend(player, suspectId) {
-  const now = Date.now();
   requireRunning();
   if (!player.slotId) throw new GameError('Сначала получите бейдж у ведущего', 409, 'no_badge');
-
-  const cooldownUntil = player.lastDefenseAt + state.config.defenseCooldownMinutes * 60_000;
-  if (cooldownUntil > now) {
-    throw new GameError(`Следующая попытка через ${Math.ceil((cooldownUntil - now) / 60_000)} мин`, 409, 'cooldown');
-  }
 
   const suspect = state.players[suspectId];
   if (!suspect || !suspect.slotId) throw new GameError('Такого участника нет в игре', 404, 'no_player');
   if (suspect.id === player.id) throw new GameError('Вы не охотитесь на самого себя', 400, 'self_defense');
-
-  const hunters = huntersOf(player.id);
-  if (hunters.length === 0) {
-    // Попытку не тратим: угадывать несуществующего охотника нечестно.
-    return { result: 'no_hunters' };
+  if (player.guardAgainst === suspect.id) {
+    throw new GameError('Защита уже поставлена на этого участника', 409, 'same_guard');
   }
 
-  if (!hunters.some((h) => h.id === suspect.id)) {
-    player.lastDefenseAt = now;
-    logEvent('defense_wrong', { playerId: player.id, nickname: player.nickname });
-    save();
-    return { result: 'wrong', nextTryAt: now + state.config.defenseCooldownMinutes * 60_000 };
-  }
-
-  player.lastDefenseAt = now;
-  player.shieldAgainst = suspect.id;
-
-  let points = 0;
-  if (!player.identifiedHunters.includes(suspect.id)) {
-    points = state.config.defensePoints;
-    player.score += points;
-    player.identifiedHunters.push(suspect.id);
-  }
-  notify(suspect, 'exposed', 'Ваша цель вас вычислила и выставила защиту. Ближайший выстрел по ней не пройдёт.');
-  logEvent('defense_right', { playerId: player.id, nickname: player.nickname, points });
+  player.guardAgainst = suspect.id;
+  player.guardSetAt = Date.now();
+  // В ленту попадает только сам факт: имя подозреваемого — тайна игрока, и
+  // ведущему оно нужно в таблице, а не в общей истории.
+  logEvent('guard_set', { playerId: player.id, nickname: player.nickname });
   save();
-  return { result: 'right', points, suspectName: suspect.name };
+  return { result: 'set', suspectName: suspect.name };
 }
 
 // --- Коды активностей --------------------------------------------------------
@@ -633,7 +645,11 @@ export function removePlayer(playerId) {
 
   activePlayers().forEach((p) => {
     if (p.targetId === playerId) assignTarget(p);
-    if (p.shieldAgainst === playerId) p.shieldAgainst = null;
+    if (p.guardAgainst === playerId) {
+      p.guardAgainst = null;
+      p.guardSetAt = 0;
+    }
+    if (p.notes) delete p.notes[playerId];
   });
   logEvent('player_removed', { playerId, nickname: player.nickname });
   save();
@@ -695,15 +711,18 @@ export function playerView(player) {
       hints: player.hints,
       hintsLeft: Math.max(0, (player.hintOrder?.length ?? 0) - player.hints.length),
       attempts: player.attempts,
+      // Кто на игрока охотится и сколько их — не сообщаем: это он и должен
+      // выяснить. Отдаём только его собственную ставку.
       defense: {
-        shielded: Boolean(player.shieldAgainst),
-        nextTryAt: player.lastDefenseAt + state.config.defenseCooldownMinutes * 60_000,
-        identified: player.identifiedHunters.length,
+        guardId: player.guardAgainst,
+        guardName: player.guardAgainst ? state.players[player.guardAgainst]?.name ?? null : null,
+        guardSetAt: player.guardSetAt ?? 0,
+        blocked: player.identifiedHunters.length,
       },
       log: player.log.slice(0, 20),
       inbox: player.inbox.slice(0, 10),
     },
-    roster: roster(),
+    roster: roster(player),
     board: board(),
     serverTime: now,
   };
@@ -761,7 +780,7 @@ export function adminView() {
           targetName: p.targetId ? state.players[p.targetId]?.name ?? null : null,
           hunters: counts.get(p.id) ?? 0,
           hints: p.hints.length,
-          shielded: Boolean(p.shieldAgainst),
+          guardName: p.guardAgainst ? state.players[p.guardAgainst]?.name ?? null : null,
           lastSeenAt: p.lastSeenAt,
           loginBlockedUntil: (p.loginBlockedUntil ?? 0) > Date.now() ? p.loginBlockedUntil : 0,
         };

@@ -83,7 +83,7 @@ function render() {
         p.loginBlockedUntil ? 'вход заблокирован' : stale ? 'давно не заходил' : 'на связи'
       }</span></td>
         <td>${esc(p.targetName ?? '—')}<br /><span class="muted small">охотников: ${p.hunters}${
-        p.shielded ? ' · щит' : ''
+        p.guardName ? ` · ждёт ${esc(p.guardName)}` : ''
       }</span></td>
         <td><b>${p.score}</b></td>
         <td class="muted">${p.hits}/${p.misses} · ${p.ammo} патр.</td>

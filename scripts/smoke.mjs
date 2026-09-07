@@ -46,7 +46,7 @@ console.log(`\nHeadHunter smoke test -> ${BASE}\n`);
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
 await call('/api/admin/config', {
   method: 'PATCH',
-  body: { shotCooldownSeconds: 0, defenseCooldownMinutes: 0, ammoStart: 6, ammoMax: 6 },
+  body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6 },
   admin,
 });
 const slots = await call('/api/admin/slots', { method: 'POST', body: { count: 30 }, admin });
@@ -301,34 +301,57 @@ check(
   stillFresh.data.codes.find((c) => c.code === fifth).used === 0
 );
 
-// 6. Защита: игрок вычисляет своего охотника
+// 6. Защита — ставка без обратной связи: верная и неверная выглядят одинаково
 const hunter = everyone().find((p) => p.targetId === me.id);
 const notHunter = everyone().find((p) => p.id !== me.id && p.id !== hunter.id);
 
-const wrongDefense = await call('/api/defend', { method: 'POST', body: { playerId: notHunter.id }, token: tokens[0] });
-check('неверная защита не срабатывает', wrongDefense.data.result === 'wrong', JSON.stringify(wrongDefense.data));
+const wrongGuard = await call('/api/defend', { method: 'POST', body: { playerId: notHunter.id }, token: tokens[0] });
+check('защита ставится без ответа о правильности', wrongGuard.data.result === 'set', JSON.stringify(wrongGuard.data));
+check('за постановку защиты очков не дают', wrongGuard.data.state.me.score === 0, `score ${wrongGuard.data.state.me.score}`);
+check('игрок видит свою ставку', wrongGuard.data.state.me.defense.guardName === notHunter.name);
+check(
+  'число охотников игроку не показывают',
+  !('hunters' in wrongGuard.data.state.me.defense) && !('identified' in wrongGuard.data.state.me.defense),
+  JSON.stringify(wrongGuard.data.state.me.defense)
+);
 
-const rightDefense = await call('/api/defend', { method: 'POST', body: { playerId: hunter.id }, token: tokens[0] });
-check('верная защита опознаёт охотника', rightDefense.data.result === 'right', JSON.stringify(rightDefense.data));
-check('за охотника начислены очки', rightDefense.data.points === 8, `points ${rightDefense.data.points}`);
-check('щит активен', rightDefense.data.state.me.defense.shielded === true);
+const sameGuard = await call('/api/defend', { method: 'POST', body: { playerId: notHunter.id }, token: tokens[0] });
+check('ставка на того же человека отклоняется', sameGuard.data.code === 'same_guard', JSON.stringify(sameGuard.data));
 
-const repeatDefense = await call('/api/defend', { method: 'POST', body: { playerId: hunter.id }, token: tokens[0] });
-check('повторное опознание того же охотника очков не даёт', repeatDefense.data.points === 0);
+const rightGuard = await call('/api/defend', { method: 'POST', body: { playerId: hunter.id }, token: tokens[0] });
+check('ставку можно менять без паузы', rightGuard.data.result === 'set', JSON.stringify(rightGuard.data));
+check(
+  'верная ставка неотличима от неверной',
+  JSON.stringify(Object.keys(rightGuard.data).sort()) === JSON.stringify(Object.keys(wrongGuard.data).sort()),
+  JSON.stringify(Object.keys(rightGuard.data))
+);
+check('ставка переехала на охотника', rightGuard.data.state.me.defense.guardName === hunter.name);
 
 const hunterToken = tokens[everyone().findIndex((p) => p.id === hunter.id)];
-const hunterInbox = await call('/api/me', { token: hunterToken });
-check('охотник узнал, что его вычислили', hunterInbox.data.me.inbox.some((m) => m.kind === 'exposed'));
+const hunterBefore = await call('/api/me', { token: hunterToken });
+check('охотник не знает, что его ждут', !hunterBefore.data.me.inbox.some((m) => m.kind === 'exposed'));
 
-// 7. Щит гасит ближайший выстрел
+// 7. Срабатывает только выстрелом — и снимает контракт с охотника
 const blocked = await call('/api/shoot', { method: 'POST', body: { playerId: me.id }, token: hunterToken });
-check('щит погасил выстрел', blocked.data.result === 'blocked', JSON.stringify(blocked.data));
-check('за погашенный выстрел очков не снимают', blocked.data.state.me.score === 0, `score ${blocked.data.state.me.score}`);
+check('защита погасила выстрел', blocked.data.result === 'blocked', JSON.stringify(blocked.data));
+check('стрелок очков не теряет', blocked.data.state.me.score === 0, `score ${blocked.data.state.me.score}`);
+check('стрелок получил новую цель', Boolean(blocked.data.newTargetNickname), JSON.stringify(blocked.data));
+check('подсказки ушли вместе с контрактом', blocked.data.state.me.hints.length === 0);
+check('стрелку сказали, что его ждали', blocked.data.state.me.inbox.some((m) => m.kind === 'blocked'));
 
-const afterShield = await call('/api/shoot', { method: 'POST', body: { playerId: me.id }, token: hunterToken });
-check('второй выстрел проходит: щит одноразовый', afterShield.data.result === 'hit', JSON.stringify(afterShield.data));
-check('охотник получил новый контракт', Boolean(afterShield.data.newTargetNickname));
-check('подсказки обнулились вместе с контрактом', afterShield.data.state.me.hints.length === 0);
+await sleep(300);
+raw = await readState();
+check('контракт на защитника снят', byToken(hunterToken).targetId !== me.id);
+
+const afterBlock = await call('/api/me', { token: tokens[0] });
+check('защитнику начислены очки', afterBlock.data.me.score === 8, `score ${afterBlock.data.me.score}`);
+check('сработавшая ставка снята', afterBlock.data.me.defense.guardName === null);
+check('остановленных охотников посчитали', afterBlock.data.me.defense.blocked === 1);
+check(
+  'защитник узнал, кто на него охотился',
+  afterBlock.data.me.inbox.some((m) => m.kind === 'defense' && m.text.includes(hunter.name)),
+  JSON.stringify(afterBlock.data.me.inbox[0])
+);
 
 // 8. Выстрелы по именам
 await sleep(300);
@@ -404,7 +427,13 @@ const adminState = await call('/api/admin/state', { admin });
 check('ведущий видит связку имя-ник-эмблема', adminState.data.players.every((p) => p.name && p.nickname));
 check('ведущий видит цель по реальному имени', adminState.data.players.every((p) => !p.hasBadge || p.targetName));
 check('ведущий видит выпущенные коды', adminState.data.codes.length === 6, `codes ${adminState.data.codes.length}`);
-check('лента событий содержит защиту', adminState.data.events.some((e) => e.type === 'defense_right'));
+check('лента событий содержит сработавшую защиту', adminState.data.events.some((e) => e.type === 'blocked'));
+check('лента событий содержит постановку защиты', adminState.data.events.some((e) => e.type === 'guard_set'));
+check(
+  'ведущий видит, кого игрок ждёт',
+  adminState.data.players.some((p) => 'guardName' in p),
+  JSON.stringify(adminState.data.players[0])
+);
 
 const bonus = await call(`/api/admin/player/${me.id}/score`, { method: 'POST', body: { delta: 5 }, admin });
 check(

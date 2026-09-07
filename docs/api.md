@@ -65,7 +65,10 @@ me
   target { nickname }                          только никнейм цели
   hints[], hintsLeft
   attempts[]                                   по кому уже стреляли в этом контракте
-  defense { shielded, nextTryAt, identified }
+  bountyAttempts[]                             то же для текущего розыска, отдельно
+  defense { guardId, guardName, guardSetAt, blocked }
+                                               своя ставка защиты и сколько
+                                               охотников она уже остановила
   log[], inbox[]
 roster[] { id, name }                          список имён: для выстрела и защиты
 board[]  { nickname, score, hits, misses }     табло
@@ -86,12 +89,15 @@ ammo, state }`, где `result` — `hit`, `miss` или `blocked`. При по�
 
 ### POST /api/defend
 
-Тело: `{ playerId }` — предполагаемый охотник. Ответ: `{ result, state }`, где
-`result`:
+Ставит защиту на предполагаемого охотника. Тело: `{ playerId }` — id из `roster`.
+Ответ: `{ result: 'set', suspectName, state }`.
 
-- `right` — угадал: плюс `points` и `suspectName`, встаёт щит;
-- `wrong` — не угадал: `nextTryAt`, попытка потрачена;
-- `no_hunters` — на игрока никто не охотится, попытка **не** тратится.
+Ответ намеренно одинаков и для верной, и для неверной ставки: правильность игрок
+узнаёт только тогда, когда этот человек в него выстрелит. Иначе перебор списка
+давал бы информацию бесплатно.
+
+Отказы: `no_badge`, `no_player`, `self_defense`, `same_guard` (ставка уже стоит на
+этом участнике).
 
 ### POST /api/code
 

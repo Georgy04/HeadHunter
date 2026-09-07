@@ -268,7 +268,7 @@ function renderLog(me) {
     list.innerHTML = '<li class="muted small">Пока не стреляли</li>';
     return;
   }
-  const LABEL = { hit: 'попадание', miss: 'мимо', blocked: 'защита цели' };
+  const LABEL = { hit: 'попадание', miss: 'мимо', blocked: 'защита цели', bounty: 'награда за розыск' };
   list.innerHTML = me.log
     .map((entry) => {
       const extra = entry.result === 'hit' ? ` — это был ${esc(entry.targetNickname ?? '')}` : '';
@@ -316,7 +316,12 @@ function renderPeople(roster, me) {
     .join('');
 
   $('list-defense').innerHTML = others
-    .map((p) => `<button class="person" data-id="${p.id}" data-name="${esc(p.name)}">${esc(p.name)}</button>`)
+    .map((p) =>
+      personRow(p, {
+        extra: me.defense.guardId === p.id ? 'защита стоит здесь' : '',
+        mark: me.defense.guardId === p.id ? 'guarded' : '',
+      })
+    )
     .join('');
 
   applySearch('shoot');
@@ -338,9 +343,12 @@ function applySearch(kind) {
 
 function renderDefense(me) {
   const parts = [];
-  if (me.defense.shielded) parts.push('Щит активен: ближайший выстрел вашего охотника не пройдёт.');
-  if (me.defense.nextTryAt > Date.now()) parts.push(`Следующая попытка через ${countdown(me.defense.nextTryAt)}.`);
-  if (me.defense.identified) parts.push(`Охотников вычислено: ${me.defense.identified}.`);
+  parts.push(
+    me.defense.guardName
+      ? `Защита стоит на: ${me.defense.guardName}. Менять можно в любой момент.`
+      : 'Защита не поставлена: любой выстрел по вам пройдёт.'
+  );
+  if (me.defense.blocked) parts.push(`Охотников остановлено: ${me.defense.blocked}.`);
   $('defense-status').textContent = parts.join(' ');
 }
 
@@ -396,7 +404,8 @@ $('list-defense').addEventListener('click', (event) => {
     `<div class="card-label">Выставить защиту</div>
      <p class="center big-name">${esc(btn.dataset.name)}</p>
      <p class="center">Вы считаете, что этот человек охотится на вас.</p>
-     <p class="muted small center">Не угадаете — следующая попытка нескоро.</p>`,
+     <p class="muted small center">Ставку можно менять когда угодно, но действует только одна.
+     Правильность не покажут — узнаете, если он выстрелит.</p>`,
     async () => {
       try {
         const res = await api('/api/defend', { method: 'POST', body: { playerId: btn.dataset.id } });
@@ -439,37 +448,29 @@ function showShotFlash(res, name) {
       `<div class="flash-title hit">ПОПАДАНИЕ</div>
        <div class="flash-sub">${esc(name)} и есть ${esc(res.victimNickname)}. ${res.points > 0 ? '+' : ''}${res.points} очков.<br />
        Новая цель: <b>${esc(res.newTargetNickname ?? '—')}</b></div>`,
-      4200
+      4600
     );
   } else if (res.result === 'blocked') {
     flash(
       `<div class="flash-title blocked">ЗАЩИТА</div>
-       <div class="flash-sub">Вы опознали человека верно, но он успел выставить защиту. Патрон потрачен, очки на месте.</div>`,
-      4200
+       <div class="flash-sub">${esc(name)} ждал именно вас. Опознали верно, но контракт провален.<br />
+       Новая цель: <b>${esc(res.newTargetNickname ?? '—')}</b></div>`,
+      4600
     );
   } else {
     flash(`<div class="flash-title miss">МИМО</div><div class="flash-sub">Это не ваша цель. ${res.points} очков.</div>`, 2600);
   }
 }
 
+// Правильность ставки не сообщается — иначе можно было бы перебирать людей и
+// получать информацию бесплатно. Игрок узнаёт ответ только выстрелом по нему.
 function showDefenseFlash(res) {
-  if (res.result === 'right') {
-    flash(
-      `<div class="flash-title hit">ВЫЧИСЛИЛИ</div>
-       <div class="flash-sub">${esc(res.suspectName)} действительно охотится на вас.${
-        res.points ? ` +${res.points} очков.` : ' Очки за него уже начислены раньше.'
-      }<br />Щит выставлен.</div>`,
-      4200
-    );
-  } else if (res.result === 'no_hunters') {
-    flash(
-      `<div class="flash-title">ПОКА ТИХО</div>
-       <div class="flash-sub">На вас сейчас никто не охотится. Попытка не потрачена.</div>`,
-      3200
-    );
-  } else {
-    flash(`<div class="flash-title miss">НЕ УГАДАЛИ</div><div class="flash-sub">Этот человек за вами не охотится.</div>`, 2800);
-  }
+  flash(
+    `<div class="flash-title">ЗАЩИТА ПОСТАВЛЕНА</div>
+     <div class="flash-sub">Ждём ${esc(res.suspectName)}. Если он и правда охотится на вас и выстрелит —
+     выстрел не пройдёт, а контракт с вас снимут.<br />Угадали или нет, вы поймёте только тогда.</div>`,
+    4600
+  );
 }
 
 $('flash').addEventListener('click', () => $('flash').classList.add('hidden'));
