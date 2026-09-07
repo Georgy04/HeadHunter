@@ -387,6 +387,7 @@ app.get(
     }
     const cards = slots.map(
       (slot) => `<div class="badge">
+            <div class="banner">Разыскивается</div>
             <div class="emblem">${emblemSvg(slot, { size: 190, flat: true })}</div>
             <div class="code">${slot.code}</div>
           </div>`
@@ -402,11 +403,20 @@ app.get(
 <html lang="ru"><head><meta charset="utf-8" />
 <title>Бейджи — ${escapeHtml(state.config.eventTitle)}</title>
 <style>
+  /* Бейджи печатаются на бумаге, поэтому вестерн здесь чёрным по белому:
+     рамка плаката и капитель, без заливок, которые съедают тонер. */
   @page { size: A4; margin: 10mm; }
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #111; }
+  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; color: #111; }
   .hint { padding: 8px 12px; background: #f2f3f5; font-size: 13px; }
   .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; padding: 6mm; }
-  .badge { border: 1px dashed #bbb; border-radius: 10px; padding: 6mm 4mm 4mm; text-align: center; break-inside: avoid; }
+  .badge {
+    border: 2px solid #111;
+    box-shadow: inset 0 0 0 1.2mm #fff, inset 0 0 0 1.6mm #111;
+    padding: 5mm 4mm 4mm;
+    text-align: center;
+    break-inside: avoid;
+  }
+  .banner { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 2mm; }
   .emblem { line-height: 0; }
   .code { font: 600 15px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 2px; margin-top: 3mm; }
   @media print { .hint { display: none; } }

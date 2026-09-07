@@ -12,7 +12,9 @@
       .cols { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
       @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
       .row { display: flex; gap: 8px; flex-wrap: wrap; }
-      .row .btn { flex: 1; min-width: 120px; padding: 11px 12px; font-size: 14px; }
+      /* Разрядка из общей темы делает кнопки пульта слишком длинными: их тут
+         много и они стоят в узкой колонке, поэтому здесь буквы плотнее. */
+      .row .btn { flex: 1; min-width: 120px; padding: 11px 12px; font-size: 13px; letter-spacing: 0.4px; }
       .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
       .stat { background: var(--card-2); border-radius: 12px; padding: 10px 12px; }
       .stat b { display: block; font-size: 22px; }
