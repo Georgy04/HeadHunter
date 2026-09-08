@@ -27,6 +27,7 @@ import {
   postChat,
   reassignBadge,
   redeemCode,
+  refreshWanted,
   registerPlayer,
   removePlayer,
   resetPin,
@@ -459,6 +460,108 @@ app.get(
   })
 );
 
+/**
+ * Табло на большой экран: открывается с ноутбука, показывается на телевизоре или
+ * проекторе, обновляется само.
+ *
+ * По ходу игры на нём **никнеймы и очки раунда** — ровно то же, что игроки видят
+ * у себя в приложении. Настоящие имена сюда выводить нельзя: рядом с теми же
+ * суммами они мгновенно раскрыли бы связку «никнейм — человек», и игра
+ * закончилась бы. Имена и сквозной счёт появляются только по `?final=1` — это
+ * режим для аукциона, когда прятать уже нечего.
+ */
+app.get(
+  '/board',
+  handle((req, res) => {
+    requireAdmin(req);
+    // Плакат на табло должен быть тем же, что у игроков: пересчитываем розыск,
+    // иначе на экране висело бы объявление, снятое пять минут назад.
+    refreshWanted();
+    const final = req.query.final === '1';
+    const rows = final
+      ? activePlayers()
+          .slice()
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru'))
+          .map((p) => ({ label: p.name, sub: `«${p.nickname}»`, score: p.score }))
+      : board().map((r) => ({ label: r.nickname, sub: '', score: r.score }));
+
+    const wanted = state.game.wanted;
+    const title = escapeHtml(state.config.eventTitle);
+    const round = state.game.round ?? 0;
+    const heading = final ? 'Итоги вечера' : round > 1 ? `Табло · раунд ${round}` : 'Табло';
+
+    res.type('html').send(`<!doctype html>
+<html lang="ru"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${heading} — ${title}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3vh 4vw;
+    background: radial-gradient(circle at 50% 0%, #241b13, #100d0a 70%);
+    color: #f3e7d3;
+    font-family: Georgia, 'Times New Roman', serif;
+    min-height: 100vh;
+  }
+  h1 { margin: 0 0 1vh; font-size: 4.2vh; letter-spacing: 2px; text-transform: uppercase; }
+  .sub { color: #a4917a; font-size: 2vh; letter-spacing: 3px; text-transform: uppercase; }
+  .wanted {
+    margin: 2vh 0;
+    padding: 1.6vh 2vw;
+    border: 2px solid #ff7a1a;
+    background: rgba(255, 122, 26, 0.1);
+    font-size: 3vh;
+  }
+  .wanted b { color: #ff9d4d; }
+  ol { list-style: none; margin: 3vh 0 0; padding: 0; counter-reset: rank; }
+  li {
+    counter-increment: rank;
+    display: grid;
+    grid-template-columns: 8vh 1fr auto;
+    align-items: baseline;
+    gap: 2vw;
+    padding: 1.4vh 0;
+    border-bottom: 1px solid #3a2e22;
+    font-size: 3.4vh;
+  }
+  li::before { content: counter(rank); color: #7d6a54; font-variant-numeric: tabular-nums; }
+  li:nth-child(1) { color: #ffc043; font-size: 4.4vh; }
+  li:nth-child(2), li:nth-child(3) { color: #ffe0b0; font-size: 3.9vh; }
+  .name-sub { color: #a4917a; font-size: 2vh; letter-spacing: 1px; margin-left: 1vw; }
+  .pts { font-variant-numeric: tabular-nums; font-weight: 700; color: #ff9d4d; }
+  .pts::before { content: '$'; color: #7d6a54; margin-right: 0.4vw; font-size: 0.7em; }
+  .empty { margin-top: 4vh; color: #a4917a; font-size: 2.6vh; }
+</style></head>
+<body>
+  <div class="sub">${title}</div>
+  <h1>${heading}</h1>
+  ${
+    wanted && !final
+      ? `<div class="wanted">Разыскивается <b>«${escapeHtml(wanted.nickname)}»</b> — награда ${wanted.bounty}</div>`
+      : ''
+  }
+  ${
+    rows.length === 0
+      ? '<p class="empty">Пока никого: игроки появятся здесь, как только получат бейджи.</p>'
+      : `<ol>${rows
+          .map(
+            (r) => `<li><span>${escapeHtml(r.label)}${
+              r.sub ? `<span class="name-sub">${escapeHtml(r.sub)}</span>` : ''
+            }</span><span class="pts">${r.score}</span></li>`
+          )
+          .join('')}</ol>`
+  }
+  <script>
+    // Страница висит на телевизоре весь вечер, поэтому обновляет себя сама.
+    // Перерисовка целиком, без хитростей: сравнивать нечего, а мигание раз в
+    // десять секунд на табло никому не мешает.
+    setTimeout(() => location.reload(), 10000);
+  </script>
+</body></html>`);
+  })
+);
+
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -540,6 +643,7 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
   interfaces.forEach((i) => console.log(`  players : http://${i.address}:${PORT}   [${i.name}]`));
   console.log(`  admin   : ${url}/admin?token=${state.adminToken}`);
   console.log(`  badges  : ${url}/print?token=${state.adminToken}`);
+  console.log(`  board   : ${url}/board?token=${state.adminToken}`);
   console.log('  --------------------------------------------');
   if (interfaces.length > 1) {
     console.log(`  Links and the QR below use the first address: ${primary} [${interfaces[0].name}].`);

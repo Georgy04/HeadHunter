@@ -251,6 +251,13 @@ check(
   'табло показывает только никнеймы',
   view.data.board.every((r) => !NAMES.includes(r.nickname))
 );
+// На табло — только ник и очки раунда. Попадания и сквозной счёт не обнуляются
+// со сменой раунда, и по ним можно было бы сопоставить прежний ник с новым.
+check(
+  'табло не выдаёт ничего, кроме ника и очков раунда',
+  view.data.board.every((r) => Object.keys(r).sort().join() === 'nickname,score'),
+  JSON.stringify(view.data.board[0])
+);
 
 // 5. Подсказки за коды
 const madeCodes = await call('/api/admin/codes', {
@@ -801,13 +808,23 @@ check('журналы выстрелов очищены', crew.every((c) => byTo
 check('ставки защиты сняты', crew.every((c) => byToken(c.token).guardAgainst === null));
 // Пауза после награды раунд не переживает, а объявление пересобирается заново —
 // и обязательно с новым никнеймом лидера, иначе розыск указывал бы на чужого.
-const topScorer = crew.map((c) => byToken(c.token)).sort((a, b) => b.score - a.score)[0];
+// Табло раунда обнулено, а сквозной счёт цел. Это и закрывает главную дыру
+// перетасовки: совпадающие суммы до и после смены раунда выдали бы, кто теперь
+// под каким ником, а сравнивать нули не с чем.
 check(
-  'пауза розыска сброшена, объявление пересобрано с новым никнеймом',
-  raw.game.wantedPauseUntil === 0 &&
-    (raw.game.wanted === null ||
-      (raw.game.wanted.playerId === topScorer.id && raw.game.wanted.nickname === topScorer.nickname)),
-  JSON.stringify(raw.game.wanted)
+  'табло раунда обнулено у всех',
+  crew.every((c) => byToken(c.token).roundScore === 0),
+  JSON.stringify(crew.map((c) => byToken(c.token).roundScore))
+);
+check(
+  'сквозной счёт на аукцион цел',
+  crew.every((c) => byToken(c.token).score === beforeRound[c.id].score),
+  JSON.stringify(crew.map((c) => `${beforeRound[c.id].score} -> ${byToken(c.token).score}`))
+);
+check(
+  'розыск начинается с чистого листа: на нулевом табло лидера нет',
+  raw.game.wanted === null && raw.game.wantedPauseUntil === 0,
+  JSON.stringify(raw.game)
 );
 check(
   'контракты розданы заново по кругу',
@@ -817,6 +834,42 @@ check(
 
 const afterRound = await call('/api/me', { token: watcher.token });
 check('игрок видит номер раунда', afterRound.data.game.round === 2);
+check(
+  'игрок видит свой сквозной счёт отдельно от очков раунда',
+  afterRound.data.me.score === 0 && afterRound.data.me.totalScore === beforeRound[watcher.id].score,
+  JSON.stringify({ round: afterRound.data.me.score, total: afterRound.data.me.totalScore })
+);
+check(
+  'на табло у всех нули: сопоставлять прежние ники не с чем',
+  afterRound.data.board.every((r) => r.score === 0),
+  JSON.stringify(afterRound.data.board)
+);
+
+const adminRound = await call('/api/admin/state', { admin });
+check(
+  'ведущий видит оба счёта',
+  adminRound.data.players.every((p) => p.roundScore === 0 && typeof p.score === 'number') &&
+    adminRound.data.players.some((p) => p.score > 0),
+  JSON.stringify(adminRound.data.players.map((p) => `${p.name}: ${p.roundScore}/${p.score}`))
+);
+
+// Табло на большой экран: по ходу игры на нём никнеймы, а имена — только в
+// режиме итогов. Иначе те же суммы рядом с именами раскрыли бы всю игру.
+const bigBoard = await fetch(`${BASE}/board?token=${admin}`);
+const bigHtml = await bigBoard.text();
+check('табло на большой экран открывается', bigBoard.status === 200 && bigHtml.includes('<ol>'), `status ${bigBoard.status}`);
+check(
+  'на игровом табло нет реальных имён',
+  !CREW.some(([name]) => bigHtml.includes(name)),
+  CREW.map(([name]) => name).filter((name) => bigHtml.includes(name)).join()
+);
+check('на игровом табло есть никнеймы', crew.some((c) => bigHtml.includes(byToken(c.token).nickname)));
+
+const finalBoard = await (await fetch(`${BASE}/board?final=1&token=${admin}`)).text();
+check('итоговое табло называет имена и сквозной счёт', CREW.every(([name]) => finalBoard.includes(name)));
+
+const closedBoard = await fetch(`${BASE}/board`);
+check('табло закрыто токеном ведущего', closedBoard.status === 401, `status ${closedBoard.status}`);
 check('в почте лежит новый никнейм', afterRound.data.me.inbox.some((m) => m.kind === 'nickname'));
 check(
   'прежних сообщений в почте не осталось: они называли чужие теперь ники',

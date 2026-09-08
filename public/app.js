@@ -206,7 +206,12 @@ function apply(data) {
     (game.round ?? 0) > 1
       ? `раунд ${game.round} · ${STATUS_TEXT[game.status] ?? game.status}`
       : STATUS_TEXT[game.status] ?? game.status;
+  // Наверху — счёт раунда: за него идёт борьба на табло и из-за него объявляют в
+  // розыск. Сквозной счёт нужен только на аукционе, поэтому висит мелко и лишь
+  // тогда, когда отличается от раундового.
   $('top-score').textContent = me.score;
+  $('top-total').textContent = `всего ${me.totalScore}`;
+  $('top-total').classList.toggle('hidden', me.totalScore === me.score);
 
   $('target-nickname').textContent = me.target ? me.target.nickname : 'ждём начала игры';
   $('defense-points').textContent = `+${rules.defensePoints}`;
@@ -656,11 +661,17 @@ $('flash').addEventListener('click', () => $('flash').classList.add('hidden'));
 
 // --- Табло и вкладки ----------------------------------------------------------
 
+/**
+ * На табло только никнейм и очки раунда. Попаданий и промахов здесь нет
+ * намеренно: они не обнуляются со сменой раунда, и по ним, как и по сквозному
+ * счёту, можно было бы сопоставить прежний никнейм с новым. Своя статистика
+ * лежит у игрока на главной.
+ */
 function renderBoard(rows, myNickname) {
   $('board-list').innerHTML = rows
     .map(
       (r) => `<li class="${r.nickname === myNickname ? 'me' : ''}">
-        <span>${esc(r.nickname)}<span class="sub">${r.hits} попаданий · ${r.misses} промахов</span></span>
+        <span>${esc(r.nickname)}</span>
         <span class="pts">${r.score}</span>
       </li>`
     )

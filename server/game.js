@@ -108,7 +108,9 @@ export function registerPlayer(name, nickname, pin) {
     nickname: cleanNickname,
     slotId: null,
     reservedSlotId: slot.id,
+    // score — сквозной счёт на аукцион, roundScore — счёт текущего раунда для табло.
     score: 0,
+    roundScore: 0,
     hits: 0,
     misses: 0,
     targetId: null,
@@ -270,6 +272,21 @@ function hunterCounts() {
   return counts;
 }
 
+/**
+ * Очки идут в два счётчика сразу. Сквозной `score` — деньги на аукцион, он копится
+ * весь вечер и виден только ведущему. `roundScore` — счёт текущего раунда, по нему
+ * строится табло у игроков и выбирается разыскиваемый.
+ *
+ * Разделение появилось из-за перетасовки никнеймов: если бы табло показывало
+ * сквозной счёт, суммы до и после смены раунда совпали бы, и любой, кто запомнил
+ * прежнее табло, сопоставил бы старый никнейм с новым по цифрам. Обнулённый счёт
+ * раунда сопоставлять не с чем.
+ */
+function addPoints(player, amount) {
+  player.score += amount;
+  player.roundScore = (player.roundScore ?? 0) + amount;
+}
+
 function setTarget(player, targetId) {
   player.targetId = targetId;
   player.attempts = [];
@@ -371,6 +388,10 @@ export function startGame() {
     mixNicknames(active);
     wipeRoundTraces();
   }
+  // Табло начинается с нуля у всех: по нему и выбирается разыскиваемый.
+  players().forEach((player) => {
+    player.roundScore = 0;
+  });
 
   // Стартовая раздача — замкнутый круг: каждый охотится ровно на одного
   // и ровно один охотится на него.
@@ -438,18 +459,22 @@ function requireRunning() {
 // --- Розыск ------------------------------------------------------------------
 
 /**
- * Лидер табло попадает в розыск: его никнейм и награда видны всем, и стрелять в
+ * Лидер раунда попадает в розыск: его никнейм и награда видны всем, и стрелять в
  * него может каждый, а не только его охотник. Имя не объявляется намеренно —
  * иначе награду забирал бы тот, у кого просто оказался патрон, а так двадцать
  * девять человек получают общую задачу вычислить одного.
+ *
+ * Считаем по очкам раунда, а не по сквозному счёту: сквозной не обнуляется, и
+ * розыск после перетасовки никнеймов указывал бы на того же человека под новым
+ * именем — половина площадки получила бы связку даром.
  */
 function soleLeader() {
   const active = activePlayers();
   if (active.length < 2) return null;
-  const best = Math.max(...active.map((p) => p.score));
-  // На нуле лидера нет: в начале игры все равны, и розыск был бы случайным.
+  const best = Math.max(...active.map((p) => p.roundScore ?? 0));
+  // На нуле лидера нет: в начале раунда все равны, и розыск был бы случайным.
   if (best <= 0) return null;
-  const leaders = active.filter((p) => p.score === best);
+  const leaders = active.filter((p) => (p.roundScore ?? 0) === best);
   // Двое наверху — розыска нет: игра не должна выбирать между ними жребием.
   return leaders.length === 1 ? leaders[0] : null;
 }
@@ -500,7 +525,7 @@ export function refreshWanted(now = Date.now()) {
 /** Награда приходит сверху: разыскиваемый ничего не теряет, деньги на аукцион не сгорают. */
 function payBounty(player, victim, now) {
   const points = state.config.bountyPoints;
-  player.score += points;
+  addPoints(player, points);
   state.game.wanted = null;
   state.game.wantedPauseUntil = now + Math.max(0, state.config.bountyPauseMinutes) * 60_000;
 
@@ -586,7 +611,7 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
       outcome = { result: 'bounty', points, victimNickname: victim.nickname };
     } else {
       const penalty = state.config.missPenalty;
-      player.score -= penalty;
+      addPoints(player, -penalty);
       player.misses += 1;
       player.bountyAttempts.push(victim.id);
       entry.result = 'miss';
@@ -606,7 +631,7 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
 
   if (victim.id !== player.targetId) {
     const penalty = state.config.missPenalty;
-    player.score -= penalty;
+    addPoints(player, -penalty);
     player.misses += 1;
     player.attempts.push(victim.id);
     entry.result = 'miss';
@@ -627,7 +652,7 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
     let points = 0;
     if (!victim.identifiedHunters.includes(player.id)) {
       points = state.config.defensePoints;
-      victim.score += points;
+      addPoints(victim, points);
       victim.identifiedHunters.push(player.id);
     }
 
@@ -659,7 +684,7 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
     // Цель оказалась в розыске — награда идёт сверх очков за контракт.
     const alsoWanted = wanted?.playerId === victim.id ? payBounty(player, victim, now) : 0;
     points += alsoWanted;
-    player.score += state.config.hitPoints;
+    addPoints(player, state.config.hitPoints);
     player.hits += 1;
     entry.result = 'hit';
     entry.points = points;
@@ -775,7 +800,7 @@ export function redeemCode(player, rawCode) {
   }
 
   entry.usedBy.push(player.id);
-  if (entry.points) player.score += entry.points;
+  if (entry.points) addPoints(player, entry.points);
 
   logEvent('code_redeemed', { playerId: player.id, nickname: player.nickname, code, points: entry.points });
   save();
@@ -828,7 +853,7 @@ export function adjustScore(playerId, delta, reason = 'вручную') {
   if (!player) throw new GameError('Игрок не найден', 404);
   const amount = Number(delta);
   if (!Number.isFinite(amount)) throw new GameError('Некорректное количество очков');
-  player.score += Math.round(amount);
+  addPoints(player, Math.round(amount));
   logEvent('score_adjusted', { playerId, nickname: player.nickname, delta: Math.round(amount), reason });
   notify(player, 'score', `Ведущий изменил ваш счёт: ${amount > 0 ? '+' : ''}${Math.round(amount)}`);
   save();
@@ -957,10 +982,16 @@ export function setNote(player, otherId, rawText) {
 
 export const emblemSvg = (slot, options) => renderEmblem(slot.emblem, options);
 
+/**
+ * Табло у игроков — очки текущего раунда и ничего больше. Сквозной счёт сюда не
+ * попадает намеренно: с перетасовкой никнеймов совпадающие суммы до и после
+ * смены раунда выдали бы, кто теперь под каким именем. Попадания и промахи по
+ * той же причине остались личной статистикой — они тоже не обнуляются.
+ */
 export function board() {
   return activePlayers()
-    .map((p) => ({ nickname: p.nickname, score: p.score, hits: p.hits, misses: p.misses }))
-    .sort((a, b) => b.score - a.score || b.hits - a.hits || a.nickname.localeCompare(b.nickname));
+    .map((p) => ({ nickname: p.nickname, score: p.roundScore ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.nickname.localeCompare(b.nickname));
 }
 
 /**
@@ -1012,7 +1043,11 @@ export function playerView(player) {
       id: player.id,
       name: player.name,
       nickname: player.nickname,
-      score: player.score,
+      // Свой счёт игрок видит целиком: очки раунда — то, за что идёт борьба на
+      // табло, сквозной — его деньги на аукцион. Про чужой сквозной счёт он не
+      // узнаёт ничего, и связка «ник — человек» через цифры не восстанавливается.
+      score: player.roundScore ?? 0,
+      totalScore: player.score,
       hits: player.hits,
       misses: player.misses,
       hasBadge: Boolean(slot),
@@ -1091,7 +1126,12 @@ export function adminView() {
         };
       }),
     players: players()
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru'))
+      // Сначала счёт раунда: по нему идёт игра и выбирается разыскиваемый.
+      // Сквозной — валюта аукциона, он важен в конце вечера, а не по ходу.
+      .sort(
+        (a, b) =>
+          (b.roundScore ?? 0) - (a.roundScore ?? 0) || b.score - a.score || a.name.localeCompare(b.name, 'ru')
+      )
       .map((p) => {
         const slot = slotById(p.slotId);
         refreshAmmo(p);
@@ -1099,7 +1139,10 @@ export function adminView() {
           id: p.id,
           name: p.name,
           nickname: p.nickname,
+          // Ведущий видит оба счёта: сквозной нужен для аукциона, счёт раунда —
+          // чтобы понимать, кто наверху табло и почему объявлен в розыск.
           score: p.score,
+          roundScore: p.roundScore ?? 0,
           hits: p.hits,
           misses: p.misses,
           ammo: p.ammo,

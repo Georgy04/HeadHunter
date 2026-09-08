@@ -87,7 +87,10 @@
           <div class="nickname" id="top-nickname">—</div>
           <div class="muted small" id="top-status">—</div>
         </div>
-        <div class="score" id="top-score">0</div>
+        <div class="score">
+          <span id="top-score">0</span>
+          <span class="score-total hidden" id="top-total">всего 0</span>
+        </div>
       </header>
 
       <main class="view" id="view-home">
@@ -196,8 +199,12 @@
 
       <main class="view hidden" id="view-board">
         <div class="card">
-          <div class="card-label">Табло</div>
+          <div class="card-label">Табло раунда</div>
           <ol class="board" id="board-list"></ol>
+          <p class="muted small">
+            Очки текущего раунда. Тот, кто здесь один наверху, попадает в розыск. Ваш общий счёт за
+            вечер — тот, что мелко указан в углу: его вы и потратите на аукционе.
+          </p>
         </div>
       </main>
 

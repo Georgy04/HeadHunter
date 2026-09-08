@@ -76,6 +76,12 @@
               <button class="btn" data-action="finish">Финал</button>
               <button class="btn ghost" data-action="reshuffle">Перераздать цели</button>
             </div>
+            <p class="muted small">
+              Табло на большой экран: <a class="link" id="board-link" href="#" target="_blank">по ходу игры</a>
+              (никнеймы и очки раунда) ·
+              <a class="link" id="board-final-link" href="#" target="_blank">итоги вечера</a>
+              (имена и общий счёт — только когда игра закончена).
+            </p>
           </div>
 
           <!-- Розыск объявляется сам, ведущему он нужен, чтобы крикнуть об этом на площадке. -->
@@ -145,7 +151,7 @@
             <table>
               <thead>
                 <tr>
-                  <th></th><th>Имя</th><th>Никнейм</th><th>Цель</th><th>Очки</th><th>Стрельба</th><th>Подсказки</th><th></th>
+                  <th></th><th>Имя</th><th>Никнейм</th><th>Цель</th><th>Раунд / всего</th><th>Стрельба</th><th>Подсказки</th><th></th>
                 </tr>
               </thead>
               <tbody id="players"></tbody>

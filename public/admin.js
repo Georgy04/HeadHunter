@@ -58,6 +58,8 @@ function render() {
   } · игроков ${data.players.length}`;
   $('print-link').href = `/print?token=${encodeURIComponent(token)}`;
   $('print-free-link').href = `/print?free=1&token=${encodeURIComponent(token)}`;
+  $('board-link').href = `/board?token=${encodeURIComponent(token)}`;
+  $('board-final-link').href = `/board?final=1&token=${encodeURIComponent(token)}`;
 
   const { slots, issued, reserved, free, shots, registered } = data.stats;
   $('stats').innerHTML = [
@@ -88,7 +90,7 @@ function render() {
         <td>${esc(p.targetName ?? '—')}<br /><span class="muted small">охотников: ${p.hunters}${
         p.guardName ? ` · ждёт ${esc(p.guardName)}` : ''
       }</span></td>
-        <td><b>${p.score}</b></td>
+        <td><b>${p.roundScore}</b><br /><span class="muted small">всего ${p.score}</span></td>
         <td class="muted">${p.hits}/${p.misses} · ${p.ammo} патр.</td>
         <td class="muted">${p.hints}</td>
         <td>
@@ -136,7 +138,7 @@ function renderWanted() {
   const pause = data.wantedPauseUntil;
   box.innerHTML = pause
     ? `<span class="muted">Пауза после награды до ${new Date(pause).toLocaleTimeString('ru-RU')}</span>`
-    : '<span class="muted">Никого: наверху табло нет единственного лидера</span>';
+    : '<span class="muted">Никого: в табло раунда нет единственного лидера</span>';
 }
 
 function renderChat() {
