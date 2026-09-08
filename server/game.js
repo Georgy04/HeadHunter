@@ -318,9 +318,59 @@ function insertIntoChain(player) {
   save();
 }
 
+/**
+ * Никнеймы уезжают к другим людям. К концу раунда половина площадки уже связала
+ * ник с лицом, и второй раунд без перетасовки разгадали бы за минуту. Сдвиг по
+ * кругу — перестановка без неподвижных точек: свой прежний ник не остаётся ни у
+ * кого, а сам набор придуманных участниками имён сохраняется.
+ */
+function mixNicknames(active) {
+  const ring = shuffle(active);
+  const previous = ring.map((p) => p.nickname);
+  ring.forEach((player, index) => {
+    player.nickname = previous[(index + 1) % previous.length];
+  });
+}
+
+/**
+ * Никнеймы поменяли владельцев, поэтому всё, что на них ссылалось, теперь врёт:
+ * журнал выстрелов, уведомления и салун. Это стираем. Очки, попадания и блокнот
+ * живут дальше: очки идут на аукцион, а заметки писались про эмблемы, а эмблемы
+ * остаются на своих владельцах.
+ */
+function wipeRoundTraces() {
+  state.chat.length = 0;
+  players().forEach((player) => {
+    player.log.length = 0;
+    player.inbox.length = 0;
+    player.bountyAttempts = [];
+    player.bountyRound = 0;
+    player.guardAgainst = null;
+    player.guardSetAt = 0;
+    player.identifiedHunters = [];
+    player.lastChatAt = 0;
+  });
+}
+
+/**
+ * Старт раунда. Первый раунд идёт с теми никнеймами, которые участники придумали
+ * сами; каждый следующий начинается с перетасовки — счёт при этом сквозной,
+ * потому что очки тратятся на аукционе в конце вечера, а не в конце раунда.
+ */
 export function startGame() {
   const active = activePlayers();
   if (active.length < 2) throw new GameError('Нужно минимум два игрока с бейджами');
+  // Иначе случайное нажатие «Старт» посреди раунда стёрло бы салун и журналы.
+  // Для перераздачи целей без потерь есть отдельная кнопка.
+  if (state.game.status === 'running') {
+    throw new GameError('Раунд уже идёт: сначала завершите его, потом начинайте новый', 409, 'already_running');
+  }
+
+  const round = (state.game.round ?? 0) + 1;
+  if (round > 1) {
+    mixNicknames(active);
+    wipeRoundTraces();
+  }
 
   // Стартовая раздача — замкнутый круг: каждый охотится ровно на одного
   // и ровно один охотится на него.
@@ -332,7 +382,19 @@ export function startGame() {
   state.game.finishedAt = null;
   state.game.wanted = null;
   state.game.wantedPauseUntil = 0;
-  logEvent('game_started', { players: ring.length });
+  state.game.round = round;
+  state.game.roundStartedAt = state.game.startedAt;
+
+  if (round > 1) {
+    active.forEach((player) =>
+      notify(
+        player,
+        'nickname',
+        `Раунд ${round}: теперь вы «${player.nickname}». Прежний никнейм ушёл другому участнику, а эмблема на бейдже осталась вашей.`
+      )
+    );
+  }
+  logEvent('game_started', { players: ring.length, round });
   save();
 }
 
@@ -856,16 +918,19 @@ const PULSE = {
   blocked: () => 'чья-то защита сработала: контракт снят',
   code_redeemed: () => 'кто-то получил подсказку за активность',
   badge_issued: () => 'в игру вошёл новый участник',
-  game_started: (e) => `игра началась, участников ${e.players}`,
+  game_started: (e) =>
+    (e.round ?? 1) > 1 ? `раунд ${e.round} начался, никнеймы перетасованы` : `игра началась, участников ${e.players}`,
   wanted_declared: (e) => `в розыске: ${e.nickname}, награда ${e.bounty}`,
   wanted_cleared: () => 'розыск снят',
   bounty_claimed: (e) => `награду за ${e.victimNickname} забрали`,
 };
 
-// Лента событий хранится новыми вперёд, поэтому берём начало, а не конец.
+// Лента событий хранится новыми вперёд, поэтому берём начало, а не конец. Пульс
+// обрезан текущим раундом: события прошлого раунда называют никнеймы, которые с
+// перетасовкой достались другим людям, и лента вводила бы в заблуждение.
 const pulse = () =>
   state.events
-    .filter((e) => PULSE[e.type])
+    .filter((e) => PULSE[e.type] && e.at >= (state.game.roundStartedAt ?? 0))
     .slice(0, 25)
     .map((e) => ({ at: e.at, text: PULSE[e.type](e) }));
 
@@ -923,7 +988,7 @@ export function playerView(player) {
   const regenMs = Math.max(1, state.config.ammoRegenMinutes) * 60_000;
 
   return {
-    game: { status: state.game.status, title: state.config.eventTitle },
+    game: { status: state.game.status, title: state.config.eventTitle, round: state.game.round ?? 0 },
     rules: {
       hitPoints: state.config.hitPoints,
       missPenalty: state.config.missPenalty,

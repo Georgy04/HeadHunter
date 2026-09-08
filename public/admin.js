@@ -52,7 +52,10 @@ $('token-save').addEventListener('click', async () => {
 function render() {
   $('auth').classList.add('hidden');
   $('panel').classList.remove('hidden');
-  $('status-line').textContent = `Игра: ${STATUS_TEXT[data.game.status] ?? data.game.status} · игроков ${data.players.length}`;
+  const round = data.game.round ?? 0;
+  $('status-line').textContent = `Игра: ${STATUS_TEXT[data.game.status] ?? data.game.status}${
+    round > 0 ? ` · раунд ${round}` : ''
+  } · игроков ${data.players.length}`;
   $('print-link').href = `/print?token=${encodeURIComponent(token)}`;
   $('print-free-link').href = `/print?free=1&token=${encodeURIComponent(token)}`;
 
@@ -89,8 +92,9 @@ function render() {
         <td class="muted">${p.hits}/${p.misses} · ${p.ammo} патр.</td>
         <td class="muted">${p.hints}</td>
         <td>
-          <button class="mini-btn" data-score="${p.id}" data-delta="5">+5</button>
-          <button class="mini-btn" data-score="${p.id}" data-delta="-5">−5</button>
+          <button class="mini-btn" data-score="${p.id}" data-delta="1000">+1000</button>
+          <button class="mini-btn" data-score="${p.id}" data-delta="-1000">−1000</button>
+          <button class="mini-btn" data-score-ask="${p.id}">±</button>
           <button class="mini-btn" data-hint="${p.id}">подсказка</button>
           <button class="mini-btn" data-retarget="${p.id}">цель</button>
           <button class="mini-btn" data-pin="${p.id}">PIN</button>
@@ -234,7 +238,10 @@ function describeEvent(e) {
     case 'code_redeemed': return `${e.nickname} ввёл код ${e.code}`;
     case 'codes_created': return `выпущено кодов: ${e.count}`;
     case 'hint_granted': return `${e.nickname} получил подсказку от ведущего`;
-    case 'game_started': return `игра началась, игроков: ${e.players}`;
+    case 'game_started':
+      return (e.round ?? 1) > 1
+        ? `раунд ${e.round} начался, никнеймы перетасованы, игроков: ${e.players}`
+        : `игра началась, игроков: ${e.players}`;
     case 'game_status': return `статус игры: ${STATUS_TEXT[e.status] ?? e.status}`;
     case 'slots_created': return e.append ? `добавлено бейджей: ${e.count}` : `создано бейджей: ${e.count}`;
     case 'targets_reshuffled': return 'цели перераспределены';
@@ -292,6 +299,16 @@ $('btn-cfg').addEventListener('click', async () => {
 
 document.querySelectorAll('[data-action]').forEach((btn) => {
   btn.addEventListener('click', async () => {
+    // Второй и следующие старты — это новый раунд с перетасовкой никнеймов:
+    // ведущий должен понимать, что стирает салун и журналы участников.
+    if (btn.dataset.action === 'start' && (data?.game?.round ?? 0) > 0) {
+      const next = (data.game.round ?? 0) + 1;
+      const ok = confirm(
+        `Начать раунд ${next}? Никнеймы перетасуются между участниками, цели раздадутся заново, ` +
+          `салун и журналы выстрелов очистятся. Очки, попадания и заметки останутся.`
+      );
+      if (!ok) return;
+    }
     try {
       data = await api(`/api/admin/game/${btn.dataset.action}`, { method: 'POST' });
       render();
@@ -346,7 +363,14 @@ $('btn-codes').addEventListener('click', async () => {
 });
 
 $('btn-reset').addEventListener('click', async () => {
-  if (prompt('Это удалит игроков, очки и бейджи. Введите RESET для подтверждения') !== 'RESET') return;
+  if (
+    prompt(
+      'Это удалит игроков, очки и бейджи: коды на напечатанных бейджах станут чужими. ' +
+        'Копия игры останется в папке data. Введите RESET для подтверждения'
+    ) !== 'RESET'
+  ) {
+    return;
+  }
   await api('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' } });
   $('cfg').dataset.filled = '';
   toast('Игра сброшена');
@@ -362,6 +386,19 @@ $('players').addEventListener('click', async (event) => {
         method: 'POST',
         body: { delta: Number(btn.dataset.delta), reason: 'активность' },
       });
+    } else if (btn.dataset.scoreAsk) {
+      // Лоты аукциона стоят произвольные суммы, а списывать их приходится
+      // здесь же: кнопок на все случаи не наделать.
+      const raw = prompt('Сколько очков начислить? Со знаком минус — списать.', '1000');
+      if (raw === null) return;
+      const delta = Number(raw.replace(',', '.').trim());
+      if (!Number.isFinite(delta) || delta === 0) return toast('Нужно число, например 2500 или −500');
+      const reason = prompt('За что? Попадёт в журнал.', 'аукцион') ?? 'вручную';
+      data = await api(`/api/admin/player/${btn.dataset.scoreAsk}/score`, {
+        method: 'POST',
+        body: { delta, reason },
+      });
+      toast(`${delta > 0 ? '+' : ''}${delta} очков записано`);
     } else if (btn.dataset.hint) {
       const res = await api(`/api/admin/player/${btn.dataset.hint}/hint`, { method: 'POST' });
       data = res;

@@ -11,10 +11,10 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 // патрон приходит раз в час. Первый час уходит на разведку, а не на пальбу.
 export const DEFAULT_CONFIG = {
   eventTitle: 'HeadHunter',
-  hitPoints: 10,
-  missPenalty: 3,
-  defensePoints: 8,
-  bountyPoints: 15,
+  hitPoints: 1000,
+  missPenalty: 0,
+  defensePoints: 2000,
+  bountyPoints: 2000,
   bountyHoldMinutes: 20,
   bountyPauseMinutes: 60,
   ammoStart: 0,
@@ -26,7 +26,7 @@ export const DEFAULT_CONFIG = {
   wifiPassword: '',
 };
 
-const STATE_VERSION = 5;
+const STATE_VERSION = 6;
 
 export function newId(bytes = 8) {
   return crypto.randomBytes(bytes).toString('hex');
@@ -45,7 +45,17 @@ function emptyState() {
     version: STATE_VERSION,
     adminToken: newId(12),
     config: { ...DEFAULT_CONFIG },
-    game: { status: 'lobby', startedAt: null, finishedAt: null, wanted: null, wantedPauseUntil: 0 },
+    game: {
+      status: 'lobby',
+      startedAt: null,
+      finishedAt: null,
+      // Раунд считается от нуля: первый старт даёт первый раунд и не тасует
+      // никнеймы, каждый следующий — тасует.
+      round: 0,
+      roundStartedAt: 0,
+      wanted: null,
+      wantedPauseUntil: 0,
+    },
     slots: [],
     players: {},
     codes: [],
@@ -132,6 +142,16 @@ export function saveSync() {
 }
 
 export function resetState() {
+  // Сброс отменить нельзя, а бейджи к этому моменту уже напечатаны: новый набор
+  // получит другие коды, и бумага станет мусором. Поэтому прежнее состояние
+  // откладываем рядом с файлом — игру можно вернуть, положив копию на место.
+  try {
+    saveSync();
+    fs.copyFileSync(STATE_FILE, `${STATE_FILE}.before-reset-${Date.now()}`);
+  } catch (err) {
+    console.error(`[store] reset backup failed: ${err.message}`);
+  }
+
   const fresh = emptyState();
   fresh.adminToken = state.adminToken;
   fresh.config = { ...state.config };

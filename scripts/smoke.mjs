@@ -44,9 +44,13 @@ console.log(`\nHeadHunter smoke test -> ${BASE}\n`);
 
 // 1. Чистый старт
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
+// Очки задаём явно: боевые значения ведущий крутит перед каждой игрой, а
+// механику проверять надо при любом балансе. Штраф здесь ненулевой намеренно —
+// иначе проверять его нечем; нулевой штраф по умолчанию сверяет check-docs.
+const POINTS = { hitPoints: 1000, missPenalty: 300, defensePoints: 2000, bountyPoints: 2000 };
 await call('/api/admin/config', {
   method: 'PATCH',
-  body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6 },
+  body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6, ...POINTS },
   admin,
 });
 const slots = await call('/api/admin/slots', { method: 'POST', body: { count: 30 }, admin });
@@ -344,7 +348,11 @@ raw = await readState();
 check('контракт на защитника снят', byToken(hunterToken).targetId !== me.id);
 
 const afterBlock = await call('/api/me', { token: tokens[0] });
-check('защитнику начислены очки', afterBlock.data.me.score === 8, `score ${afterBlock.data.me.score}`);
+check(
+  'защитнику начислены очки',
+  afterBlock.data.me.score === POINTS.defensePoints,
+  `score ${afterBlock.data.me.score}`
+);
 check('сработавшая ставка снята', afterBlock.data.me.defense.guardName === null);
 check('остановленных охотников посчитали', afterBlock.data.me.defense.blocked === 1);
 check(
@@ -359,11 +367,11 @@ raw = await readState();
 const myTargetId = byToken(tokens[0]).targetId;
 const wrongPerson = everyone().find((p) => p.id !== me.id && p.id !== myTargetId);
 const scoreBefore = byToken(tokens[0]).score;
-check('очки за защиту на месте', scoreBefore === 8, `score ${scoreBefore}`);
+check('очки за защиту на месте', scoreBefore === POINTS.defensePoints, `score ${scoreBefore}`);
 
 const missed = await call('/api/shoot', { method: 'POST', body: { playerId: wrongPerson.id }, token: tokens[0] });
 check('промах засчитан', missed.data.result === 'miss', JSON.stringify(missed.data));
-check('штраф снят', missed.data.state.me.score === scoreBefore - 3);
+check('штраф снят', missed.data.state.me.score === scoreBefore - POINTS.missPenalty);
 check('промах отмечен в списке', missed.data.state.me.attempts.includes(wrongPerson.id));
 
 const again = await call('/api/shoot', { method: 'POST', body: { playerId: wrongPerson.id }, token: tokens[0] });
@@ -377,7 +385,11 @@ const victimScoreBefore = (await call('/api/me', { token: victimToken })).data.m
 
 const hit = await call('/api/shoot', { method: 'POST', body: { playerId: myTargetId }, token: tokens[0] });
 check('попадание засчитано', hit.data.result === 'hit', JSON.stringify(hit.data));
-check('очки за попадание начислены', hit.data.state.me.score === scoreBefore - 3 + 10);
+check(
+  'очки за попадание начислены',
+  hit.data.state.me.score === scoreBefore - POINTS.missPenalty + POINTS.hitPoints,
+  `score ${hit.data.state.me.score}`
+);
 check('выдан новый контракт', hit.data.newTargetNickname !== hit.data.victimNickname);
 check('подсказки по новому контракту начались заново', hit.data.state.me.hints.length === 0);
 
@@ -435,11 +447,12 @@ check(
   JSON.stringify(adminState.data.players[0])
 );
 
+const expectedBonus = scoreAfterHit - POINTS.missPenalty + 5;
 const bonus = await call(`/api/admin/player/${me.id}/score`, { method: 'POST', body: { delta: 5 }, admin });
 check(
   'ведущий начисляет очки за активности',
-  bonus.data.players.find((p) => p.id === me.id).score === scoreAfterHit - 3 + 5,
-  `score ${bonus.data.players.find((p) => p.id === me.id).score}, ожидалось ${scoreAfterHit - 3 + 5}`
+  bonus.data.players.find((p) => p.id === me.id).score === expectedBonus,
+  `score ${bonus.data.players.find((p) => p.id === me.id).score}, ожидалось ${expectedBonus}`
 );
 
 const adminHint = await call(`/api/admin/player/${me.id}/hint`, { method: 'POST', admin });
@@ -592,7 +605,7 @@ check('при ничьей наверху розыска нет', (await wantedO
 await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 3 }, admin });
 const declared = await wantedOf(watcher);
 check('единственный лидер объявлен в розыск', declared?.nickname === leader.nickname, JSON.stringify(declared));
-check('награда взята из настроек', declared?.bounty === 15, JSON.stringify(declared?.bounty));
+check('награда взята из настроек', declared?.bounty === POINTS.bountyPoints, JSON.stringify(declared?.bounty));
 check(
   'имя разыскиваемого не раскрывают',
   Object.keys(declared).sort().join() === 'bounty,isMe,isMyTarget,nickname,since',
@@ -631,7 +644,11 @@ const bountyMiss = await call('/api/shoot', {
   body: { playerId: wrongGuess.id, bounty: true },
   token: chaser.token,
 });
-check('промах в розыске штрафует как обычный', bountyMiss.data.points === -3, JSON.stringify(bountyMiss.data));
+check(
+  'промах в розыске штрафует как обычный',
+  bountyMiss.data.points === -POINTS.missPenalty,
+  JSON.stringify(bountyMiss.data)
+);
 check('промах в розыске не тратит попытку контракта', !bountyMiss.data.state.me.attempts.includes(wrongGuess.id));
 check('промах в розыске записан отдельно', bountyMiss.data.state.me.bountyAttempts.includes(wrongGuess.id));
 
@@ -653,7 +670,11 @@ check('награду за себя не получить', selfBounty.data.code
 
 const leaderScoreBefore = (await call('/api/me', { token: leader.token })).data.me.score;
 const claim = await call('/api/shoot', { method: 'POST', body: { playerId: leader.id, bounty: true }, token: chaser.token });
-check('награда за верную догадку выплачена', claim.data.result === 'bounty' && claim.data.points === 15, JSON.stringify(claim.data));
+check(
+  'награда за верную догадку выплачена',
+  claim.data.result === 'bounty' && claim.data.points === POINTS.bountyPoints,
+  JSON.stringify(claim.data)
+);
 
 await sleep(300);
 raw = await readState();
@@ -737,10 +758,104 @@ check('заметку о себе не ведут', selfNote.data.code === 'self
 const erased = await call('/api/note', { method: 'POST', body: { playerId: marked.id, text: '' }, token: watcher.token });
 check('пустая заметка стирает прежнюю', erased.data.state.roster.find((p) => p.id === marked.id)?.note === '');
 
+// 16. Смена раунда: никнеймы уезжают к другим, счёт остаётся сквозным
+const runningView = await call('/api/me', { token: watcher.token });
+check('первый раунд пронумерован', runningView.data.game.round === 1, JSON.stringify(runningView.data.game));
+
+const startTwice = await call('/api/admin/game/start', { method: 'POST', admin });
+check('старт посреди раунда отказывает', startTwice.data.code === 'already_running', JSON.stringify(startTwice.data));
+
+// Обживаем раунд: заметка, разговор в салуне, поставленная защита.
+await call('/api/note', { method: 'POST', body: { playerId: marked.id, text: 'алый круг' }, token: watcher.token });
+await call('/api/chat', { method: 'POST', body: { text: 'договорим после перерыва' }, token: watcher.token });
+await call('/api/defend', { method: 'POST', body: { playerId: marked.id }, token: watcher.token });
+
+await sleep(300);
+raw = await readState();
+const beforeRound = Object.fromEntries(crew.map((c) => [c.id, { ...byToken(c.token) }]));
+
+await call('/api/admin/game/finish', { method: 'POST', admin });
+const roundTwo = await call('/api/admin/game/start', { method: 'POST', admin });
+check('новый раунд получил свой номер', roundTwo.data.game.round === 2, JSON.stringify(roundTwo.data.game));
+
+await sleep(300);
+raw = await readState();
+check(
+  'свой прежний никнейм не остался ни у кого',
+  crew.every((c) => byToken(c.token).nickname !== beforeRound[c.id].nickname),
+  JSON.stringify(crew.map((c) => `${beforeRound[c.id].nickname} -> ${byToken(c.token).nickname}`))
+);
+check(
+  'набор никнеймов тот же, просто у других людей',
+  JSON.stringify(crew.map((c) => byToken(c.token).nickname).sort()) ===
+    JSON.stringify(crew.map((c) => beforeRound[c.id].nickname).sort())
+);
+check(
+  'очки и попадания пережили смену раунда',
+  crew.every((c) => byToken(c.token).score === beforeRound[c.id].score && byToken(c.token).hits === beforeRound[c.id].hits),
+  JSON.stringify(crew.map((c) => `${beforeRound[c.id].score} -> ${byToken(c.token).score}`))
+);
+check('заметки блокнота пережили смену раунда', byToken(watcher.token).notes[marked.id] === 'алый круг');
+check('салун очищен: прежние ники в нём теперь чужие', raw.chat.length === 0, JSON.stringify(raw.chat));
+check('журналы выстрелов очищены', crew.every((c) => byToken(c.token).log.length === 0));
+check('ставки защиты сняты', crew.every((c) => byToken(c.token).guardAgainst === null));
+// Пауза после награды раунд не переживает, а объявление пересобирается заново —
+// и обязательно с новым никнеймом лидера, иначе розыск указывал бы на чужого.
+const topScorer = crew.map((c) => byToken(c.token)).sort((a, b) => b.score - a.score)[0];
+check(
+  'пауза розыска сброшена, объявление пересобрано с новым никнеймом',
+  raw.game.wantedPauseUntil === 0 &&
+    (raw.game.wanted === null ||
+      (raw.game.wanted.playerId === topScorer.id && raw.game.wanted.nickname === topScorer.nickname)),
+  JSON.stringify(raw.game.wanted)
+);
+check(
+  'контракты розданы заново по кругу',
+  crew.every((c) => byToken(c.token).targetId && byToken(c.token).targetId !== c.id) &&
+    new Set(crew.map((c) => byToken(c.token).targetId)).size === crew.length
+);
+
+const afterRound = await call('/api/me', { token: watcher.token });
+check('игрок видит номер раунда', afterRound.data.game.round === 2);
+check('в почте лежит новый никнейм', afterRound.data.me.inbox.some((m) => m.kind === 'nickname'));
+check(
+  'прежних сообщений в почте не осталось: они называли чужие теперь ники',
+  afterRound.data.me.inbox.every((m) => m.at >= raw.game.roundStartedAt),
+  JSON.stringify(afterRound.data.me.inbox)
+);
+check(
+  'пульс начат с нового раунда',
+  afterRound.data.pulse.every((e) => e.at >= raw.game.roundStartedAt) &&
+    afterRound.data.pulse.some((e) => e.text.includes('раунд 2')),
+  JSON.stringify(afterRound.data.pulse)
+);
+
+// Перераздача целей внутри раунда — другое действие: ники и салун не трогает.
+await call('/api/chat', { method: 'POST', body: { text: 'второй раунд пошёл' }, token: marked.token });
+const nicksBeforeReshuffle = crew.map((c) => byToken(c.token).nickname);
+await call('/api/admin/game/reshuffle', { method: 'POST', admin });
+await sleep(300);
+raw = await readState();
+check(
+  'перераздача целей не трогает никнеймы и салун',
+  JSON.stringify(crew.map((c) => byToken(c.token).nickname)) === JSON.stringify(nicksBeforeReshuffle) &&
+    raw.chat.length === 1,
+  JSON.stringify(raw.chat)
+);
+
 // Тест крутил темп игры и наплодил игроков — возвращаем сервер в исходное состояние.
 await call('/api/admin/config', {
   method: 'PATCH',
-  body: { shotCooldownSeconds: 120, ammoStart: 0, ammoMax: 3, bountyHoldMinutes: 20 },
+  body: {
+    shotCooldownSeconds: 120,
+    ammoStart: 0,
+    ammoMax: 3,
+    bountyHoldMinutes: 20,
+    hitPoints: 1000,
+    missPenalty: 0,
+    defensePoints: 2000,
+    bountyPoints: 2000,
+  },
   admin,
 });
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });

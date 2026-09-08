@@ -366,6 +366,9 @@ html, body {
 .note.defense { border-color: var(--good); background: rgba(143, 190, 78, 0.08); }
 .note.hint,
 .note.contract { border-color: var(--info); background: rgba(147, 180, 201, 0.07); }
+/* Смена никнейма на новом раунде — самое важное сообщение вечера: под этим
+   именем участника объявят в розыск и о нём будут говорить в салуне. */
+.note.nickname { border-color: var(--accent); background: rgba(255, 122, 26, 0.14); }
 
 /* --- Салун: разговоры и пульс --- */
 .chat { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; }

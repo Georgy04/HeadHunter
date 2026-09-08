@@ -54,7 +54,8 @@ start.sh        запуск на macOS и Linux
 state
   adminToken        токен ведущего, генерируется при первом запуске
   config            настройки из таблицы в game-rules.md
-  game              { status, startedAt, wanted, wantedPauseUntil }
+  game              { status, startedAt, round, roundStartedAt, wanted,
+                    wantedPauseUntil }
   slots[]           бейджи: код, эмблема, кем занят, за кем зарезервирован
   players{}         по id: имя, никнейм, токен, хеш и соль PIN, выданный и
                     зарезервированный слот, цель, очки, патроны, подсказки,

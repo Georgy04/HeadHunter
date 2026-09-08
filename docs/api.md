@@ -54,7 +54,7 @@ PIN из четырёх цифр, придуманный при регистра
 8 секунд.
 
 ```
-game     { status, title }
+game     { status, title, round }               round — номер раунда, 0 до старта
 rules    { hitPoints, missPenalty, defensePoints, bountyPoints, ammoMax,
            ammoRegenMinutes }
 wanted   null или { nickname, bounty, since, isMe, isMyTarget }
@@ -184,9 +184,17 @@ state }` — подписывается никнеймом игрока, имя 
 `action` — одно из: `start` (раздать контракты по кругу и начать), `pause`,
 `resume`, `finish`, `reshuffle` (перераздать контракты).
 
+`start` начинает раунд и увеличивает `game.round`. Со второго раунда он ещё и
+перетасовывает никнеймы между участниками, стирает салун, журналы выстрелов,
+уведомления, защиты и розыск; очки, попадания, заметки и бейджи остаются. Пока
+раунд идёт, повторный `start` отказывает (`already_running`): сначала `finish`.
+
 ### POST /api/admin/reset
 
 Тело: `{ confirm: "RESET" }`. Полный сброс игры. Без подтверждения — ошибка.
+Перед сбросом состояние копируется в `data/state.json.before-reset-<время>`:
+коды на уже напечатанных бейджах после сброса становятся чужими, и вернуть игру
+можно только из копии.
 
 ### POST /api/admin/player/:id/score
 

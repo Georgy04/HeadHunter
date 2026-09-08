@@ -201,7 +201,11 @@ function apply(data) {
   if ($('screen-game').classList.contains('hidden')) showScreen('game');
 
   $('top-nickname').textContent = me.nickname;
-  $('top-status').textContent = STATUS_TEXT[game.status] ?? game.status;
+  // Номер раунда показываем со второго: он объясняет, почему никнейм сменился.
+  $('top-status').textContent =
+    (game.round ?? 0) > 1
+      ? `раунд ${game.round} · ${STATUS_TEXT[game.status] ?? game.status}`
+      : STATUS_TEXT[game.status] ?? game.status;
   $('top-score').textContent = me.score;
 
   $('target-nickname').textContent = me.target ? me.target.nickname : 'ждём начала игры';
@@ -231,6 +235,12 @@ function announce(prev, data) {
   if (prev.game.status === 'lobby' && data.game.status === 'running') {
     if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
     toast('Игра началась. Ваша цель уже в приложении.', 6000);
+  }
+  // Смена никнейма бывает только на новом раунде, и пропустить её нельзя:
+  // под этим именем игрока объявят в розыск и о нём будут говорить в салуне.
+  if (prev.me.nickname !== data.me.nickname) {
+    if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 120]);
+    toast(`Новый раунд: теперь вы «${data.me.nickname}»`, 9000);
   }
 }
 
@@ -274,13 +284,17 @@ function renderShootNote(data) {
     .querySelectorAll('.seg-btn')
     .forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === shootMode));
 
+  // Штраф за промах ведущий может обнулить, и тогда про очки говорить нечего:
+  // цена ошибки — потраченный патрон, а он приходит раз в час.
+  const missCost = rules.missPenalty > 0 ? `промах <b>−${rules.missPenalty}</b>` : 'промах стоит только патрона';
+
   $('shoot-label').textContent = bounty ? 'Выстрел за награду' : 'Выстрел';
   $('shoot-note').innerHTML = bounty
     ? `Выберите человека, который, по-вашему, и есть <b>${esc(wanted.nickname)}</b>.
-       Награда <b>+${wanted.bounty}</b>, промах <b>−${rules.missPenalty}</b>.
+       Награда <b>+${wanted.bounty}</b>, ${missCost}.
        Промах здесь не мешает вашему контракту.`
     : `Выберите человека, который, по-вашему, и есть <b>${esc(me.target ? me.target.nickname : '—')}</b>.
-       Попадание <b>+${rules.hitPoints}</b>, промах <b>−${rules.missPenalty}</b>. Можно не стрелять и подождать подсказок.`;
+       Попадание <b>+${rules.hitPoints}</b>, ${missCost}. Можно не стрелять и подождать подсказок.`;
 }
 
 function renderSaloon(data, myNickname) {
@@ -501,9 +515,9 @@ $('list-shoot').addEventListener('click', (event) => {
      <p class="center big-name">${esc(row.dataset.name)}</p>
      <p class="center">Вы заявляете, что это <b>${esc(claim)}</b></p>
      <p class="muted small center">${
-       bounty
-         ? `Угадали — награда ${wanted.bounty}. Промах стоит ${snapshot.rules.missPenalty} очков и патрон.`
-         : `Промах стоит ${snapshot.rules.missPenalty} очков и патрон.`
+       snapshot.rules.missPenalty > 0
+         ? `${bounty ? `Угадали — награда ${wanted.bounty}. ` : ''}Промах стоит ${snapshot.rules.missPenalty} очков и патрон.`
+         : `${bounty ? `Угадали — награда ${wanted.bounty}. ` : ''}Промах стоит патрона.`
      }</p>`,
     async () => {
       try {
@@ -619,7 +633,11 @@ function showShotFlash(res, name) {
       4600
     );
   } else {
-    flash(`<div class="flash-title miss">МИМО</div><div class="flash-sub">Это не ваша цель. ${res.points} очков.</div>`, 2600);
+    flash(
+      `<div class="flash-title miss">МИМО</div>
+       <div class="flash-sub">Это не ваша цель. ${res.points < 0 ? `${res.points} очков, патрон` : 'Патрон'} потрачен.</div>`,
+      2600
+    );
   }
 }
 

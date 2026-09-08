@@ -42,10 +42,19 @@ const configBlock = storeSource.match(/DEFAULT_CONFIG = \{([\s\S]*?)\n\};/);
 if (!configBlock) {
   fail('не удалось найти DEFAULT_CONFIG в server/store.js');
 } else {
-  const keys = [...configBlock[1].matchAll(/^\s{2}(\w+):/gm)].map(([, key]) => key);
-  if (keys.length === 0) fail('не удалось разобрать ключи DEFAULT_CONFIG');
-  for (const key of keys) {
+  const entries = [...configBlock[1].matchAll(/^\s{2}(\w+): (.+?),\s*$/gm)].map(([, key, value]) => [key, value]);
+  if (entries.length === 0) fail('не удалось разобрать ключи DEFAULT_CONFIG');
+  for (const [key] of entries) {
     if (!rulesDoc.includes(`\`${key}\``)) fail(`настройка ${key} не описана в docs/game-rules.md`);
+  }
+
+  // Числовые значения сверяем с таблицей настроек: баланс правят в коде, а
+  // таблицу забывают, и правила начинают обещать участникам не те очки.
+  for (const [key, value] of entries) {
+    if (!/^-?\d+$/.test(value)) continue;
+    const row = rulesDoc.match(new RegExp(`^\\| \`${key}\` \\| ([^|]+)\\|`, 'm'));
+    if (!row) fail(`настройка ${key} не попала в таблицу настроек docs/game-rules.md`);
+    else if (row[1].trim() !== value) fail(`в таблице настроек ${key} = ${row[1].trim()}, в коде ${value}`);
   }
 }
 
