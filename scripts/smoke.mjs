@@ -913,5 +913,16 @@ await call('/api/admin/config', {
 });
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
 
+// Читаем файл сразу, без паузы: сброс должен лежать на диске к моменту ответа.
+// Обычные правки пишутся с задержкой, но после сброса сервер часто закрывают, а
+// stop.cmd убивает процесс жёстко — отложенная запись пропала бы, и стёртая игра
+// вернулась бы при следующем запуске.
+raw = await readState();
+check(
+  'сброс записан на диск сразу',
+  Object.keys(raw.players).length === 0 && raw.slots.length === 0,
+  `игроков ${Object.keys(raw.players).length}, бейджей ${raw.slots.length}`
+);
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

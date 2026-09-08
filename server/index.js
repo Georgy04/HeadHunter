@@ -685,7 +685,9 @@ server.on('error', (err) => {
 
 process.on('exit', releasePidFile);
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
+// SIGHUP — это закрытая крестиком консоль в Windows: обычный способ остановить
+// сервер для того, кто не знает про Ctrl+C. Состояние при этом дописать успеваем.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(signal, () => {
     saveSync();
     releasePidFile();
