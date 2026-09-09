@@ -98,9 +98,13 @@
               <button class="btn ghost" id="btn-slots-add">Добавить</button>
             </div>
             <p class="muted small">
+              Набор берётся из папки <code>pool</code> сам — обычно трогать эти кнопки не нужно.
+              «Добавить» допечатывает бейджи сверх пула, не задев уже выданные; «Создать набор»
+              выпускает новые коды, и напечатанная стопка станет бесполезной.
+            </p>
+            <p class="muted small">
               Печать: <a class="link" id="print-link" href="#" target="_blank">все бейджи</a> ·
               <a class="link" id="print-free-link" href="#" target="_blank">только невыданные</a>.
-              «Добавить» допечатывает бейджи, не задев уже выданные.
             </p>
           </div>
 
@@ -114,6 +118,13 @@
               <label class="muted">Пометка</label><input id="code-note" placeholder="за викторину" />
             </div>
             <button class="btn" id="btn-codes" style="margin-top: 12px; width: 100%">Выпустить</button>
+            <p class="muted small">
+              Сотня кодов уже напечатана из папки <code>pool</code>. Здесь выпускают добавочные, если
+              на площадке придумалась новая активность. Печать:
+              <a class="link" id="print-codes-link" href="#" target="_blank">все коды</a> ·
+              <a class="link" id="print-codes-free-link" href="#" target="_blank">только неотработавшие</a>.
+            </p>
+            <p class="muted small" id="codes-left">—</p>
             <div class="codes" id="codes-list"></div>
           </div>
 

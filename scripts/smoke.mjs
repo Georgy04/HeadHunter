@@ -53,6 +53,24 @@ await call('/api/admin/config', {
   body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6, ...POINTS },
   admin,
 });
+// Бейджи и коды напечатаны заранее, поэтому сброс обязан возвращать ровно тот
+// набор, что лежит в pool/pool.json: иначе распечатанная стопка перестанет
+// подходить к игре.
+const pool = JSON.parse(await fs.readFile(path.join(ROOT, 'pool', 'pool.json'), 'utf8'));
+const seeded = await readState();
+check(
+  'сброс возвращает бейджи из пула',
+  seeded.slots.map((s) => s.code).join() === pool.badges.map((b) => b.code).join(),
+  `бейджей ${seeded.slots.length}, в пуле ${pool.badges.length}`
+);
+check(
+  'сброс возвращает коды за активности из пула',
+  seeded.codes.map((c) => c.code).join() === pool.codes.map((c) => c.code).join(),
+  `кодов ${seeded.codes.length}, в пуле ${pool.codes.length}`
+);
+check('коды из пула никем не отработаны', seeded.codes.every((c) => c.usedBy.length === 0));
+const poolCodes = pool.codes.length;
+
 const slots = await call('/api/admin/slots', { method: 'POST', body: { count: 30 }, admin });
 check('создано 30 бейджей', slots.data.count === 30, JSON.stringify(slots.data));
 
@@ -445,7 +463,11 @@ check('поздний участник не охотится сам на себ�
 const adminState = await call('/api/admin/state', { admin });
 check('ведущий видит связку имя-ник-эмблема', adminState.data.players.every((p) => p.name && p.nickname));
 check('ведущий видит цель по реальному имени', adminState.data.players.every((p) => !p.hasBadge || p.targetName));
-check('ведущий видит выпущенные коды', adminState.data.codes.length === 6, `codes ${adminState.data.codes.length}`);
+check(
+  'ведущий видит выпущенные коды',
+  adminState.data.codes.length === poolCodes + 6,
+  `codes ${adminState.data.codes.length}, ожидалось ${poolCodes + 6}`
+);
 check('лента событий содержит сработавшую защиту', adminState.data.events.some((e) => e.type === 'blocked'));
 check('лента событий содержит постановку защиты', adminState.data.events.some((e) => e.type === 'guard_set'));
 check(
@@ -486,6 +508,24 @@ check(
   badgeCount(html) === stats.slots && badgeCount(freeHtml) === stats.slots - stats.issued,
   `всего ${badgeCount(html)}/${stats.slots}, свободных ${badgeCount(freeHtml)}/${stats.slots - stats.issued}`
 );
+
+const printCodes = await fetch(`${BASE}/print?codes=1&token=${admin}`);
+const codesHtml = await printCodes.text();
+const ticketCount = (page) => (page.match(/class="ticket"/g) ?? []).length;
+check(
+  'талоны с кодами печатаются',
+  printCodes.status === 200 && ticketCount(codesHtml) === poolCodes + 6,
+  `талонов ${ticketCount(codesHtml)}, ожидалось ${poolCodes + 6}`
+);
+const printCodesFree = await fetch(`${BASE}/print?codes=1&free=1&token=${admin}`);
+const codesFreeHtml = await printCodesFree.text();
+check(
+  'отработавшие коды на допечатку не попадают',
+  ticketCount(codesFreeHtml) < ticketCount(codesHtml),
+  `неотработавших ${ticketCount(codesFreeHtml)} из ${ticketCount(codesHtml)}`
+);
+const closedPrint = await fetch(`${BASE}/print?codes=1`);
+check('листы печати закрыты токеном', closedPrint.status === 401, `status ${closedPrint.status}`);
 
 // 13. Бейджи кончились: регистрация отказывает понятно, набор дописывается на ходу
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
@@ -920,7 +960,7 @@ await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, adm
 raw = await readState();
 check(
   'сброс записан на диск сразу',
-  Object.keys(raw.players).length === 0 && raw.slots.length === 0,
+  Object.keys(raw.players).length === 0 && raw.slots.length === pool.badges.length,
   `игроков ${Object.keys(raw.players).length}, бейджей ${raw.slots.length}`
 );
 

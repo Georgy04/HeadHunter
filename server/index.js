@@ -17,7 +17,6 @@ import {
   createSlots,
   defend,
   deleteChatMessage,
-  emblemSvg,
   grantHint,
   issueBadge,
   loginWithPin,
@@ -37,6 +36,7 @@ import {
   startGame,
 } from './game.js';
 import { generateNickname } from './nicknames.js';
+import { badgeSheetHtml, codeSheetHtml, escapeHtml } from './print.js';
 
 // Проект переносится на другой ноутбук через git, поэтому версию рантайма
 // проверяем сами: молчаливое падение на синтаксисе за полчаса до игры не нужно.
@@ -400,13 +400,30 @@ app.get(
   })
 );
 
-// Лист бейджей для печати. Сканировать бейдж никому не нужно: эмблему назначает
-// сервер при регистрации, а выдаёт ведущий. Код на бейдже — чтобы ведущий нашёл
-// нужный в стопке. ?free=1 печатает только ещё не выданные — для допечатки.
+// Печать того, что сейчас в игре. Обычно печатать отсюда не нужно: набор
+// заготовлен один раз, и листы лежат в папке pool. Эта страница нужна для
+// допечатки по ходу игры (?free=1 — только ещё не выданные бейджи) и для кодов,
+// выпущенных в пульте сверх пула (?codes=1).
 app.get(
   '/print',
   handle((req, res) => {
     requireAdmin(req);
+
+    if (req.query.codes === '1') {
+      if (state.codes.length === 0) {
+        res.status(400).send('Кодов пока нет: выпустите их в пульте или возьмите готовые из папки pool.');
+        return;
+      }
+      const fresh = state.codes.filter((c) => c.usedBy.length < c.maxUses);
+      const codes = req.query.free === '1' ? fresh : state.codes;
+      if (codes.length === 0) {
+        res.status(400).send('Все коды уже отработали — печатать нечего.');
+        return;
+      }
+      res.type('html').send(codeSheetHtml({ codes, title: state.config.eventTitle }));
+      return;
+    }
+
     const onlyFree = req.query.free === '1';
     const slots = onlyFree ? state.slots.filter((s) => !s.claimedBy) : state.slots;
     if (state.slots.length === 0) {
@@ -417,13 +434,6 @@ app.get(
       res.status(400).send('Все бейджи уже выданы — печатать нечего.');
       return;
     }
-    const cards = slots.map(
-      (slot) => `<div class="badge">
-            <div class="banner">Разыскивается</div>
-            <div class="emblem">${emblemSvg(slot, { size: 190, flat: true })}</div>
-            <div class="code">${slot.code}</div>
-          </div>`
-    );
 
     const wifi = state.config.wifiSsid
       ? `Wi-Fi: <b>${escapeHtml(state.config.wifiSsid)}</b>${
@@ -431,32 +441,13 @@ app.get(
         }`
       : 'Подключитесь к Wi-Fi площадки и откройте адрес игры';
 
-    res.type('html').send(`<!doctype html>
-<html lang="ru"><head><meta charset="utf-8" />
-<title>Бейджи — ${escapeHtml(state.config.eventTitle)}</title>
-<style>
-  /* Бейджи печатаются на бумаге, поэтому вестерн здесь чёрным по белому:
-     рамка плаката и капитель, без заливок, которые съедают тонер. */
-  @page { size: A4; margin: 10mm; }
-  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; color: #111; }
-  .hint { padding: 8px 12px; background: #f2f3f5; font-size: 13px; }
-  .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; padding: 6mm; }
-  .badge {
-    border: 2px solid #111;
-    box-shadow: inset 0 0 0 1.2mm #fff, inset 0 0 0 1.6mm #111;
-    padding: 5mm 4mm 4mm;
-    text-align: center;
-    break-inside: avoid;
-  }
-  .banner { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 2mm; }
-  .emblem { line-height: 0; }
-  .code { font: 600 15px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 2px; margin-top: 3mm; }
-  @media print { .hint { display: none; } }
-</style></head>
-<body>
-  <div class="hint">${wifi}. Игрок регистрируется, приложение показывает ему нужную эмблему — найдите бейдж по картинке или коду, отдайте и подтвердите выдачу в пульте. Эмблема должна быть на виду.</div>
-  <div class="sheet">${cards.join('')}</div>
-</body></html>`);
+    res.type('html').send(
+      badgeSheetHtml({
+        slots,
+        title: state.config.eventTitle,
+        hint: `${wifi}. Игрок регистрируется, приложение показывает ему нужную эмблему — найдите бейдж по картинке или коду, отдайте и подтвердите выдачу в пульте. Эмблема должна быть на виду.`,
+      })
+    );
   })
 );
 
@@ -561,10 +552,6 @@ app.get(
 </body></html>`);
   })
 );
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
 
 app.use((req, res) => res.status(404).json({ error: 'Не найдено' }));
 

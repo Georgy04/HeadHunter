@@ -58,6 +58,8 @@ function render() {
   } · игроков ${data.players.length}`;
   $('print-link').href = `/print?token=${encodeURIComponent(token)}`;
   $('print-free-link').href = `/print?free=1&token=${encodeURIComponent(token)}`;
+  $('print-codes-link').href = `/print?codes=1&token=${encodeURIComponent(token)}`;
+  $('print-codes-free-link').href = `/print?codes=1&free=1&token=${encodeURIComponent(token)}`;
   $('board-link').href = `/board?token=${encodeURIComponent(token)}`;
   $('board-final-link').href = `/board?final=1&token=${encodeURIComponent(token)}`;
 
@@ -106,7 +108,15 @@ function render() {
     })
     .join('');
 
+  // Кодов сотня, и разглядывать их по одному незачем: ведущему важно, сколько
+  // талонов ещё в ходу. Отработавшие уезжают вниз, чтобы не мешать.
+  const spent = data.codes.filter((c) => c.used >= c.maxUses).length;
+  $('codes-left').textContent = data.codes.length
+    ? `В ходу ${data.codes.length - spent} из ${data.codes.length}, отработало ${spent}.`
+    : 'Кодов нет.';
   $('codes-list').innerHTML = data.codes
+    .slice()
+    .sort((a, b) => Number(a.used >= a.maxUses) - Number(b.used >= b.maxUses))
     .map(
       (c) => `<span class="code-chip ${c.used >= c.maxUses ? 'spent' : ''}" title="${esc(c.note)}">
         <b>${esc(c.code)}</b> ${c.grantsHint ? '· подсказка' : ''}${c.points ? ` · ${c.points} оч.` : ''} · ${c.used}/${c.maxUses}
@@ -323,7 +333,13 @@ document.querySelectorAll('[data-action]').forEach((btn) => {
 
 $('btn-slots').addEventListener('click', async () => {
   const count = Number($('slot-count').value);
-  if (!confirm(`Создать ${count} бейджей? Прошлый набор будет заменён.`)) return;
+  if (
+    !confirm(
+      `Создать ${count} бейджей заново? У новых бейджей будут другие коды, и напечатанная стопка ` +
+        `из папки pool перестанет подходить. Обычно нужна кнопка «Добавить».`
+    )
+  )
+    return;
   try {
     await api('/api/admin/slots', { method: 'POST', body: { count } });
     toast('Бейджи готовы, откройте лист печати');

@@ -3,6 +3,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+import { loadPool } from './pool.js';
+
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA_DIR = path.join(ROOT, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -40,7 +42,17 @@ export function newJoinCode() {
   return code;
 }
 
+/**
+ * Чистое состояние. Бейджи и коды берутся из заготовленного пула, если он есть:
+ * они напечатаны заранее и лежат в коробке, поэтому и новая игра, и сброс должны
+ * давать ровно тот же набор, что на бумаге. Без пула набор выпускается в пульте,
+ * как раньше.
+ */
 function emptyState() {
+  const pool = loadPool();
+  if (pool) {
+    console.log(`[pool] набор из pool/pool.json: бейджей ${pool.slots.length}, кодов ${pool.codes.length}`);
+  }
   return {
     version: STATE_VERSION,
     adminToken: newId(12),
@@ -56,9 +68,9 @@ function emptyState() {
       wanted: null,
       wantedPauseUntil: 0,
     },
-    slots: [],
+    slots: pool?.slots ?? [],
     players: {},
-    codes: [],
+    codes: pool?.codes ?? [],
     chat: [],
     events: [],
   };
@@ -82,6 +94,18 @@ function load() {
     parsed.config = { ...DEFAULT_CONFIG, ...parsed.config };
     parsed.codes ??= [];
     parsed.chat ??= [];
+
+    // Нетронутая игра подхватывает заготовленный пул. Иначе он появлялся бы
+    // только после сброса, и сервер, обновлённый между играми, встречал бы
+    // гостей без единого бейджа. Терять при этом нечего: ни игроков, ни набора.
+    if (parsed.slots.length === 0 && parsed.codes.length === 0 && Object.keys(parsed.players).length === 0) {
+      const pool = loadPool();
+      if (pool) {
+        parsed.slots = pool.slots;
+        parsed.codes = pool.codes;
+        console.log(`[pool] набор из pool/pool.json: бейджей ${pool.slots.length}, кодов ${pool.codes.length}`);
+      }
+    }
     return parsed;
   } catch (err) {
     if (err.code !== 'ENOENT') {

@@ -1,0 +1,1157 @@
+{
+  "createdAt": "2026-09-09T21:40:45.230Z",
+  "badges": [
+    {
+      "code": "ETRM9D",
+      "emblem": {
+        "outer": "square",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "JRMYEL",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "cross",
+        "outerColor": "gold",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "G4QC3E",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "FHT4AP",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "PQ3FR4",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "VUG3DX",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "gold",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "MTKECP",
+      "emblem": {
+        "outer": "square",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "YJL3FX",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "6AG7QW",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "YVFMRK",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "QQFQ3X",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "gold",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "WQKDH6",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "L9EFQJ",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "LU6WE9",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "CJ4RRC",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "WEFQVJ",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "HVN3XE",
+      "emblem": {
+        "outer": "circle",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "JNVTFX",
+      "emblem": {
+        "outer": "square",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "GKGYDC",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "GDJUEG",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "AAYRMN",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "GTGCYP",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "MJTME9",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "AENMYG",
+      "emblem": {
+        "outer": "circle",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "CYRPPY",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "GRRPCD",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "FDJVTD",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "star",
+        "outerColor": "gold",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "EKCM9D",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "GTG4QD",
+      "emblem": {
+        "outer": "circle",
+        "inner": "star",
+        "outerColor": "gold",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "WPD9E6",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "gold",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "JFVWJW",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "E7K6QR",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "4CAL9H",
+      "emblem": {
+        "outer": "circle",
+        "inner": "cross",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "QJKRKH",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "CMUCAP",
+      "emblem": {
+        "outer": "circle",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "MTQNTQ",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "TMUPR9",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "X3U9TG",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "K4M7W9",
+      "emblem": {
+        "outer": "square",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "KMXYRK",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "FTAT4N",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "gold",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "XQXAMF",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "star",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "TH9LGD",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "black"
+      }
+    },
+    {
+      "code": "HJTVWC",
+      "emblem": {
+        "outer": "circle",
+        "inner": "circle",
+        "outerColor": "crimson",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "XFFJT4",
+      "emblem": {
+        "outer": "square",
+        "inner": "star",
+        "outerColor": "gold",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "VHDK6A",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "gold",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "L6MQY7",
+      "emblem": {
+        "outer": "square",
+        "inner": "circle",
+        "outerColor": "azure",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "UUGKNJ",
+      "emblem": {
+        "outer": "square",
+        "inner": "cross",
+        "outerColor": "azure",
+        "innerColor": "white"
+      }
+    },
+    {
+      "code": "7V34QQ",
+      "emblem": {
+        "outer": "triangle",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    },
+    {
+      "code": "WHTCGL",
+      "emblem": {
+        "outer": "circle",
+        "inner": "star",
+        "outerColor": "crimson",
+        "innerColor": "lime"
+      }
+    }
+  ],
+  "codes": [
+    {
+      "code": "M3NMN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "6A9DK",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "Y76LE",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "HNFU6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "KPLLP",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "D7XMK",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "LC43X",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "C3ADA",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "V9EXV",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "VXVMP",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "DTDCV",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "DEY9X",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "C7HK9",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "WKNN7",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "MVERG",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "YVDGX",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NCVDN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "H3AAQ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "GXX4J",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NWCN7",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "K9KDQ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "JW4PX",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NP6K6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "97TM6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NUXVE",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "769XW",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "MNR3P",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "EE3HG",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "C3XEM",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "7PFN4",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "PCEKQ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "WQCMA",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "DL39T",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "D9NPL",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NTWJM",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3Q7E3",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "4CCXN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3MQEP",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "A6MPY",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "NTJXV",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "T6R4U",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3GM6U",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "FNJ7J",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "RN6P3",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "93JKQ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "HX4DM",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "LU74T",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "PATK3",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "GCWQN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "A44NJ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "PD34J",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "6YM4V",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "T9EHY",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "LKCJX",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "QML3J",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "QUH76",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "QN4R9",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "MNFJN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "46VXK",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "QFJUN",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "TUN7G",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3TTXD",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "64NGU",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "XU9LM",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "AD64L",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "LP4P6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "Y4HFY",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "LCM9W",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "TPYFV",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "XMWV4",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "E33H9",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "93GMC",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "XV7TQ",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "RTFXL",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "YTHR3",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "KLKXL",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "ENF37",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "EWRFR",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "796ND",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "VHE34",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "MHYT6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "UFDQF",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "6WJJ6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "GQGEH",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "XPD6G",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "ETQE7",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "7LGLT",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "GRQV6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3HDCA",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "43JJ9",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "734UP",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "AT64F",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "CAPFP",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "K9MA6",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "CKWRX",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "URUYW",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "G4EWE",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "G4736",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "3RUJU",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    },
+    {
+      "code": "R3NDH",
+      "points": 500,
+      "grantsHint": true,
+      "maxUses": 1,
+      "note": "активность"
+    }
+  ]
+}
