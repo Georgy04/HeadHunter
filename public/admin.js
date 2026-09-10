@@ -49,6 +49,26 @@ $('token-save').addEventListener('click', async () => {
   loadQr();
 });
 
+/**
+ * Кнопки подстраиваются под состояние игры, а не стоят все разом. «Пауза» и
+ * «Продолжить» — одна кнопка: две рядом заставляли угадывать, какая сейчас
+ * рабочая. «Старт» живёт только до первого раунда: дальше игру начинают
+ * «Сменить раунд», иначе за словом «Старт» пряталась бы перетасовка никнеймов.
+ */
+function renderGameButtons(status, round) {
+  const running = status === 'running';
+  const hold = $('btn-hold');
+  hold.dataset.action = running ? 'pause' : 'resume';
+  hold.textContent = running ? 'Пауза' : 'Продолжить';
+  hold.classList.toggle('hidden', round === 0);
+  hold.classList.toggle('primary', !running && round > 0);
+
+  $('btn-start').classList.toggle('hidden', round > 0);
+  $('btn-round').classList.toggle('hidden', round === 0);
+  $('btn-finish').classList.toggle('hidden', round === 0 || status === 'finished');
+  $('btn-reshuffle').disabled = !running;
+}
+
 function render() {
   $('auth').classList.add('hidden');
   $('panel').classList.remove('hidden');
@@ -62,6 +82,7 @@ function render() {
   $('print-codes-free-link').href = `/print?codes=1&free=1&token=${encodeURIComponent(token)}`;
   $('board-link').href = `/board?token=${encodeURIComponent(token)}`;
   $('board-final-link').href = `/board?final=1&token=${encodeURIComponent(token)}`;
+  renderGameButtons(data.game.status, round);
 
   const { slots, issued, reserved, free, shots, registered } = data.stats;
   $('stats').innerHTML = [
@@ -126,6 +147,7 @@ function render() {
 
   renderWanted();
   renderChat();
+  renderShotLog();
 
   $('events').innerHTML = data.events
     .map((e) => `<div>${new Date(e.at).toLocaleTimeString('ru-RU')} · ${esc(describeEvent(e))}</div>`)
@@ -146,9 +168,46 @@ function renderWanted() {
     return;
   }
   const pause = data.wantedPauseUntil;
-  box.innerHTML = pause
-    ? `<span class="muted">Пауза после награды до ${new Date(pause).toLocaleTimeString('ru-RU')}</span>`
-    : '<span class="muted">Никого: в табло раунда нет единственного лидера</span>';
+  if (pause) {
+    box.innerHTML = `<span class="muted">Пауза после награды до ${new Date(pause).toLocaleTimeString('ru-RU')}</span>`;
+    return;
+  }
+  // Ведущего в первую очередь интересует «а почему никого»: показываем и порог, и
+  // сегодняшний отрыв — по ним видно, далеко ли до объявления.
+  const top = data.players.filter((p) => p.hasBadge).map((p) => p.roundScore);
+  const need = data.config.bountyLeadPoints;
+  const gap = top.length > 1 ? top[0] - top[1] : 0;
+  box.innerHTML = `<span class="muted">Никого: лидер должен опережать второго больше чем на ${need}.
+    Сейчас отрыв ${gap}.</span>`;
+}
+
+const SHOT_RESULT = {
+  hit: 'попадание',
+  miss: 'промах',
+  blocked: 'защита сработала',
+  bounty: 'награда взята',
+};
+
+/**
+ * Журнал выстрелов ведущего — за весь вечер. Раунд подписан у каждой строки:
+ * после перетасовки никнеймов только он и настоящие имена дают понять, что было.
+ */
+function renderShotLog() {
+  const rows = data.shotLog ?? [];
+  $('shots-count').textContent = rows.length ? `(${rows.length})` : '';
+  $('shotlog').innerHTML = rows.length
+    ? rows
+        .map((r) => {
+          const points = r.points ? ` · ${r.points > 0 ? '+' : ''}${r.points}` : '';
+          return `<div class="shot ${r.result}">
+            <span class="at">${new Date(r.at).toLocaleTimeString('ru-RU')}</span>
+            <span class="rnd">р${r.round}</span>
+            <span class="who">${esc(r.shooter)} → ${esc(r.victim)}</span>
+            <span class="res">${SHOT_RESULT[r.result] ?? r.result}${r.bounty ? ' (за награду)' : ''}${points}</span>
+          </div>`;
+        })
+        .join('')
+    : '<div class="muted">Выстрелов пока не было</div>';
 }
 
 function renderChat() {
@@ -309,18 +368,25 @@ $('btn-cfg').addEventListener('click', async () => {
   refresh();
 });
 
+// Три действия из пяти необратимы, поэтому каждое со своим вопросом — и вопрос
+// говорит именно то, что пропадёт, а не общее «вы уверены?».
+const ACTION_CONFIRM = {
+  round: () =>
+    `Начать раунд ${(data?.game?.round ?? 0) + 1}? Никнеймы перетасуются между участниками, ` +
+    `цели раздадутся заново, табло раунда обнулится, салун и журналы выстрелов очистятся. ` +
+    `Сквозной счёт на аукцион, попадания и заметки останутся.`,
+  reshuffle: () =>
+    'Раздать новые контракты внутри текущего раунда? Никнеймы, очки и салун останутся, ' +
+    'но собранные подсказки по прежним целям пропадут у всех.',
+  finish: () =>
+    'Завершить вечер? Выстрелы, защита, коды и салун закроются для всех, розыск снимется. ' +
+    'Очки и статистика останутся — по ним и проводится аукцион.',
+};
+
 document.querySelectorAll('[data-action]').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    // Второй и следующие старты — это новый раунд с перетасовкой никнеймов:
-    // ведущий должен понимать, что стирает салун и журналы участников.
-    if (btn.dataset.action === 'start' && (data?.game?.round ?? 0) > 0) {
-      const next = (data.game.round ?? 0) + 1;
-      const ok = confirm(
-        `Начать раунд ${next}? Никнеймы перетасуются между участниками, цели раздадутся заново, ` +
-          `салун и журналы выстрелов очистятся. Очки, попадания и заметки останутся.`
-      );
-      if (!ok) return;
-    }
+    const ask = ACTION_CONFIRM[btn.dataset.action];
+    if (ask && !confirm(ask())) return;
     try {
       data = await api(`/api/admin/game/${btn.dataset.action}`, { method: 'POST' });
       render();

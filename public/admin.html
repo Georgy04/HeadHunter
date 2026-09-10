@@ -40,6 +40,16 @@
       .pend .acts { display: flex; gap: 6px; }
       .pend .btn { padding: 10px 14px; font-size: 14px; }
       .events div { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+      .shotlog { max-height: 340px; overflow: auto; font-size: 13px; }
+      .shotlog .shot { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+      .shotlog .at { color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+      .shotlog .rnd { color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; font-size: 11px; }
+      .shotlog .who { flex: 1; }
+      .shotlog .res { font-weight: 700; }
+      .shotlog .hit .res { color: var(--accent); }
+      .shotlog .bounty .res { color: var(--warn); }
+      .shotlog .blocked .res { color: var(--good); }
+      .shotlog .miss .res { color: var(--muted); }
       .chat-mod { max-height: 280px; overflow: auto; font-size: 14px; }
       .chat-mod .msg { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
       .chat-mod .msg:first-child { border-top: 0; }
@@ -70,12 +80,24 @@
           <div class="card">
             <div class="card-label">Управление игрой</div>
             <div class="row">
-              <button class="btn primary" data-action="start">Старт</button>
-              <button class="btn" data-action="pause">Пауза</button>
-              <button class="btn" data-action="resume">Продолжить</button>
-              <button class="btn" data-action="finish">Финал</button>
-              <button class="btn ghost" data-action="reshuffle">Перераздать цели</button>
+              <button class="btn primary" id="btn-start" data-action="start">Старт</button>
+              <button class="btn" id="btn-hold" data-action="pause">Пауза</button>
+              <button class="btn" id="btn-round" data-action="round">Сменить раунд</button>
+              <button class="btn ghost" id="btn-reshuffle" data-action="reshuffle">Перераздать цели</button>
             </div>
+            <p class="muted small">
+              <b>Сменить раунд</b> — никнеймы перетасуются, табло раунда обнулится, контракты
+              раздадутся заново; сквозной счёт и заметки останутся.
+              <b>Перераздать цели</b> — только новые контракты <b>внутри текущего раунда</b>:
+              никнеймы, очки и салун не трогает, но собранные подсказки по прежним целям пропадут.
+            </p>
+            <button class="btn stop big" id="btn-finish" data-action="finish" style="margin-top: 4px">
+              Завершить вечер
+            </button>
+            <p class="muted small">
+              Останавливает игру для всех и открывает итоги для аукциона. Нажали случайно —
+              «Продолжить» вернёт раунд как был.
+            </p>
             <p class="muted small">
               Табло на большой экран: <a class="link" id="board-link" href="#" target="_blank">по ходу игры</a>
               (никнеймы и очки раунда) ·
@@ -172,6 +194,17 @@
           <div class="card">
             <div class="card-label">Салун <span id="chat-count" class="muted"></span></div>
             <div class="chat-mod" id="chat-mod"></div>
+          </div>
+
+          <!-- Журнал за весь вечер: имена настоящие, поэтому смена раунда его не
+               путает и не стирает. -->
+          <div class="card">
+            <div class="card-label">Журнал выстрелов <span id="shots-count" class="muted"></span></div>
+            <div class="shotlog" id="shotlog"></div>
+            <p class="muted small">
+              Весь вечер целиком, включая прошлые раунды. Имена настоящие, поэтому перетасовка
+              никнеймов журнал не путает.
+            </p>
           </div>
 
           <div class="card">

@@ -15,6 +15,7 @@ import {
   board,
   createCodes,
   createSlots,
+  dealContracts,
   defend,
   deleteChatMessage,
   grantHint,
@@ -34,6 +35,7 @@ import {
   setNote,
   shoot,
   startGame,
+  startNextRound,
 } from './game.js';
 import { generateNickname } from './nicknames.js';
 import { badgeSheetHtml, codeSheetHtml, escapeHtml } from './print.js';
@@ -276,12 +278,12 @@ app.post(
     requireAdmin(req);
     const { action } = req.params;
     if (action === 'start') startGame();
+    else if (action === 'round') startNextRound();
     else if (action === 'pause') setGameStatus('paused');
     else if (action === 'resume') setGameStatus('running');
     else if (action === 'finish') setGameStatus('finished');
     else if (action === 'reshuffle') {
-      activePlayers().forEach((p) => assignTarget(p));
-      logEvent('targets_reshuffled', {});
+      logEvent('targets_reshuffled', { players: dealContracts() });
     } else throw new GameError('Неизвестное действие');
     res.json(adminView());
   })

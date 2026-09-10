@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG = {
   missPenalty: 0,
   defensePoints: 2000,
   bountyPoints: 2000,
+  bountyLeadPoints: 1000,
   bountyHoldMinutes: 20,
   bountyPauseMinutes: 60,
   ammoStart: 0,
@@ -72,6 +73,9 @@ function emptyState() {
     players: {},
     codes: pool?.codes ?? [],
     chat: [],
+    // Журнал выстрелов ведущего живёт весь вечер и не стирается сменой раунда —
+    // в отличие от личных журналов игроков. См. server/game.js: logShot.
+    shotLog: [],
     events: [],
   };
 }
@@ -94,6 +98,14 @@ function load() {
     parsed.config = { ...DEFAULT_CONFIG, ...parsed.config };
     parsed.codes ??= [];
     parsed.chat ??= [];
+    parsed.shotLog ??= [];
+
+    // Кулдаун перестал быть абсолютной меткой: теперь он считается от времени
+    // выстрела, чтобы правка настроек действовала и на тех, кто уже отстрелялся.
+    Object.values(parsed.players ?? {}).forEach((player) => {
+      player.lastShotAt ??= 0;
+      delete player.cooldownUntil;
+    });
 
     // Нетронутая игра подхватывает заготовленный пул. Иначе он появлялся бы
     // только после сброса, и сервер, обновлённый между играми, встречал бы

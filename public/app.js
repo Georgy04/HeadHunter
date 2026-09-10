@@ -6,6 +6,14 @@ const TOKEN_KEY = 'hh_token';
 
 let token = localStorage.getItem(TOKEN_KEY) || '';
 let snapshot = null;
+// Часы телефона и часы ноутбука-сервера редко совпадают минута в минуту, а на
+// площадке без интернета их и синхронизировать нечем. Сроки перезарядки и
+// остывания ствола сервер присылает своими метками времени, поэтому сравнивать
+// их с локальными часами нельзя: разойдись они на десять минут — и приложение
+// пообещает патрон, которого сервер ещё не даст. Держим поправку и живём по
+// серверному времени.
+let clockSkew = 0;
+const serverNow = () => Date.now() + clockSkew;
 let pollTimer = null;
 let confirmAction = null;
 // Смысл выстрела: по своему контракту или за награду в розыске.
@@ -189,6 +197,7 @@ const STATUS_TEXT = {
 function apply(data) {
   const prev = snapshot;
   snapshot = data;
+  if (data.serverTime) clockSkew = data.serverTime - Date.now();
   const { me, rules, game } = data;
   announce(prev, data);
 
@@ -339,13 +348,13 @@ function renderAmmo(me, rules) {
 
   const parts = [];
   if (me.ammo < rules.ammoMax && me.nextAmmoAt) parts.push(`следующий патрон через ${countdown(me.nextAmmoAt)}`);
-  if (me.cooldownUntil > Date.now()) parts.push(`ствол остынет через ${countdown(me.cooldownUntil)}`);
+  if (me.cooldownUntil > serverNow()) parts.push(`ствол остынет через ${countdown(me.cooldownUntil)}`);
   if (parts.length === 0) parts.push(`полный боезапас, +1 патрон каждые ${rules.ammoRegenMinutes} мин`);
   $('ammo-note').textContent = parts.join(', ');
 }
 
 function countdown(ts) {
-  const total = Math.ceil(Math.max(0, ts - Date.now()) / 1000);
+  const total = Math.ceil(Math.max(0, ts - serverNow()) / 1000);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
@@ -658,6 +667,26 @@ function showDefenseFlash(res) {
 }
 
 $('flash').addEventListener('click', () => $('flash').classList.add('hidden'));
+
+/**
+ * Выход из кабинета. Нужен из-за входа по PIN: зайдя со своего имени с чужого
+ * телефона, человек занимает браузер владельца — токен в этом браузере один.
+ * Без кнопки владелец оказался бы заперт в чужом кабинете, потому что экран
+ * входа показывается только когда токена нет.
+ */
+$('btn-logout').addEventListener('click', () => {
+  askConfirm(
+    `<div class="card-label">Выйти из кабинета</div>
+     <p class="center">Этот телефон забудет вас.</p>
+     <p class="muted small center">Вернуться можно по имени и PIN. Очки, цель и подсказки останутся на месте —
+     они хранятся на сервере, а не в телефоне.</p>`,
+    async () => {
+      clearInterval(pollTimer);
+      localStorage.removeItem(TOKEN_KEY);
+      location.href = '/';
+    }
+  );
+});
 
 // --- Табло и вкладки ----------------------------------------------------------
 

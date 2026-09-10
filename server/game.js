@@ -119,7 +119,7 @@ export function registerPlayer(name, nickname, pin) {
     hints: [],
     ammo: state.config.ammoStart,
     ammoRegenAt: Date.now(),
-    cooldownUntil: 0,
+    lastShotAt: 0,
     guardAgainst: null,
     guardSetAt: 0,
     identifiedHunters: [],
@@ -300,12 +300,17 @@ function setTarget(player, targetId) {
  */
 export function assignTarget(player) {
   const counts = hunterCounts();
-  const candidates = activePlayers().filter((p) => p.id !== player.id && p.id !== player.targetId);
-  if (candidates.length === 0) {
+  const others = activePlayers().filter((p) => p.id !== player.id);
+  if (others.length === 0) {
     setTarget(player, null);
     save();
     return null;
   }
+  // Прежнюю цель обходим стороной — дважды подряд охотиться на одного скучно, —
+  // но когда игроков всего двое, обходить некого: лучше тот же человек снова,
+  // чем игрок, оставшийся вообще без контракта.
+  const candidates = others.filter((p) => p.id !== player.targetId);
+  if (candidates.length === 0) candidates.push(...others);
   const fewest = Math.min(...candidates.map((p) => counts.get(p.id) ?? 0));
   const pool = candidates.filter((p) => (counts.get(p.id) ?? 0) === fewest);
   setTarget(player, pool[Math.floor(Math.random() * pool.length)].id);
@@ -322,6 +327,12 @@ function insertIntoChain(player) {
   const others = activePlayers().filter((p) => p.id !== player.id && p.targetId);
   if (others.length === 0) {
     assignTarget(player);
+    // Встраиваться не во что: контрактов ещё нет ни у кого. Раздаём их тем, кто
+    // остался без цели, — иначе игрок, чью цель до этого удалили, так и стоял бы
+    // без задачи, пока ведущий не перераздаст цели вручную.
+    activePlayers()
+      .filter((p) => p.id !== player.id && !p.targetId)
+      .forEach((p) => assignTarget(p));
     return;
   }
   const minHints = Math.min(...others.map((p) => p.hints.length));
@@ -351,9 +362,13 @@ function mixNicknames(active) {
 
 /**
  * Никнеймы поменяли владельцев, поэтому всё, что на них ссылалось, теперь врёт:
- * журнал выстрелов, уведомления и салун. Это стираем. Очки, попадания и блокнот
- * живут дальше: очки идут на аукцион, а заметки писались про эмблемы, а эмблемы
- * остаются на своих владельцах.
+ * личные журналы выстрелов, уведомления и салун. Это стираем. Очки, попадания и
+ * блокнот живут дальше: очки идут на аукцион, а заметки писались про эмблемы, а
+ * эмблемы остаются на своих владельцах.
+ *
+ * `state.shotLog` намеренно не трогаем: это журнал ведущего, в нём настоящие
+ * имена и номер раунда, поэтому перетасовка его не портит, а нужен он за весь
+ * вечер целиком.
  */
 function wipeRoundTraces() {
   state.chat.length = 0;
@@ -374,12 +389,13 @@ function wipeRoundTraces() {
  * сами; каждый следующий начинается с перетасовки — счёт при этом сквозной,
  * потому что очки тратятся на аукционе в конце вечера, а не в конце раунда.
  */
-export function startGame() {
+export function startGame({ force = false } = {}) {
   const active = activePlayers();
   if (active.length < 2) throw new GameError('Нужно минимум два игрока с бейджами');
   // Иначе случайное нажатие «Старт» посреди раунда стёрло бы салун и журналы.
-  // Для перераздачи целей без потерь есть отдельная кнопка.
-  if (state.game.status === 'running') {
+  // Осознанная смена раунда приходит сюда с force — за неё отвечает отдельная
+  // кнопка со своим вопросом. Для перераздачи целей без потерь есть третья.
+  if (!force && state.game.status === 'running') {
     throw new GameError('Раунд уже идёт: сначала завершите его, потом начинайте новый', 409, 'already_running');
   }
 
@@ -393,10 +409,7 @@ export function startGame() {
     player.roundScore = 0;
   });
 
-  // Стартовая раздача — замкнутый круг: каждый охотится ровно на одного
-  // и ровно один охотится на него.
-  const ring = shuffle(active);
-  ring.forEach((player, index) => setTarget(player, ring[(index + 1) % ring.length].id));
+  const dealt = dealContracts();
 
   state.game.status = 'running';
   state.game.startedAt = Date.now();
@@ -415,8 +428,36 @@ export function startGame() {
       )
     );
   }
-  logEvent('game_started', { players: ring.length, round });
+  logEvent('game_started', { players: dealt, round });
   save();
+}
+
+/**
+ * Раздача контрактов замкнутым кругом: каждый охотится ровно на одного и ровно
+ * один охотится на него. Так у площадки нет ни безнаказанных — тех, за кем никто
+ * не идёт, — ни тех, кого пасут двое.
+ *
+ * Тем же кругом работает и «Перераздать цели» посреди раунда: раздавать каждому
+ * по отдельности было бы проще, но при этом легко получить игрока, на которого
+ * не охотится никто, и он проведёт остаток раунда в безопасности, сам того не зная.
+ */
+export function dealContracts() {
+  const active = activePlayers();
+  if (active.length < 2) throw new GameError('Нужно минимум два игрока с бейджами');
+  const ring = shuffle(active);
+  ring.forEach((player, index) => setTarget(player, ring[(index + 1) % ring.length].id));
+  save();
+  return ring.length;
+}
+
+/**
+ * Смена раунда одним действием: идущий раунд закрывается и тут же начинается
+ * следующий. Раньше это делалось двумя кнопками — «Финал», потом «Старт», — и
+ * ведущему приходилось знать, что новый раунд прячется за словом «Старт».
+ */
+export function startNextRound() {
+  if (activePlayers().length < 2) throw new GameError('Нужно минимум два игрока с бейджами');
+  return startGame({ force: true });
 }
 
 export function setGameStatus(status) {
@@ -471,12 +512,15 @@ function requireRunning() {
 function soleLeader() {
   const active = activePlayers();
   if (active.length < 2) return null;
-  const best = Math.max(...active.map((p) => p.roundScore ?? 0));
+  const sorted = active.slice().sort((a, b) => (b.roundScore ?? 0) - (a.roundScore ?? 0));
+  const best = sorted[0].roundScore ?? 0;
   // На нуле лидера нет: в начале раунда все равны, и розыск был бы случайным.
   if (best <= 0) return null;
-  const leaders = active.filter((p) => (p.roundScore ?? 0) === best);
-  // Двое наверху — розыска нет: игра не должна выбирать между ними жребием.
-  return leaders.length === 1 ? leaders[0] : null;
+  // Лидерство должно быть заметным. Отрыв в одно попадание — это ещё не лидер, а
+  // тот, кто выстрелил первым: розыск скакал бы за каждым попаданием по площадке
+  // и обесценился. Порог заодно решает и ничью — при равенстве отрыва нет.
+  if (best - (sorted[1].roundScore ?? 0) <= state.config.bountyLeadPoints) return null;
+  return sorted[0];
 }
 
 export function refreshWanted(now = Date.now()) {
@@ -492,6 +536,10 @@ export function refreshWanted(now = Date.now()) {
 
   if (game.status !== 'running') return clear('game_stopped');
   if ((game.wantedPauseUntil ?? 0) > now) return clear('pause');
+
+  // Награду платит payBounty по текущим настройкам, поэтому и плакат обещает их
+  // же: иначе поправленная по ходу игры награда расходилась бы с объявленной.
+  if (game.wanted) game.wanted.bounty = state.config.bountyPoints;
 
   // Объявление держится не меньше `bountyHoldMinutes`, даже если лидер за это время
   // сменился. Иначе розыск мигал бы: ведущий начисляет очки за активности пачками,
@@ -545,6 +593,38 @@ function payBounty(player, victim, now) {
 
 // --- Выстрел -----------------------------------------------------------------
 
+/**
+ * Пауза между выстрелами считается от времени выстрела, а не запоминается меткой
+ * «свободен с такого-то часа». Так правка `shotCooldownSeconds` действует сразу и
+ * на тех, кто уже стрелял: ведущий, подкручивающий темп по ходу вечера, не должен
+ * ждать, пока догорят прежние кулдауны.
+ */
+const cooldownUntil = (player) =>
+  (player.lastShotAt ?? 0) + Math.max(0, state.config.shotCooldownSeconds) * 1000;
+
+const SHOT_LOG_LIMIT = 1000;
+
+/**
+ * Общий журнал выстрелов для ведущего. Настоящие имена и номер раунда, живёт весь
+ * вечер и смену раунда переживает — в отличие от личных журналов игроков, которые
+ * стираются: там никнеймы, а после перетасовки они указывают на других людей.
+ * Здесь имена, поэтому врать журнал не может, а ведущему он нужен целиком — по
+ * нему разбирают спорные ситуации и подводят итоги вечера.
+ */
+function logShot(player, victim, entry, asBounty) {
+  state.shotLog.unshift({
+    id: newId(4),
+    at: entry.at,
+    round: state.game.round ?? 0,
+    shooter: player.name,
+    victim: victim.name,
+    result: entry.result,
+    points: entry.points,
+    bounty: asBounty,
+  });
+  if (state.shotLog.length > SHOT_LOG_LIMIT) state.shotLog.length = SHOT_LOG_LIMIT;
+}
+
 export function shoot(player, targetPlayerId, { bounty = false } = {}) {
   const now = Date.now();
   requireRunning();
@@ -574,8 +654,10 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
 
   refreshAmmo(player, now);
   if (player.ammo < 1) throw new GameError('Патроны кончились. Дождитесь перезарядки.', 409, 'no_ammo');
-  if (player.cooldownUntil > now) {
-    throw new GameError(`Ствол ещё горячий: ${Math.ceil((player.cooldownUntil - now) / 60_000)} мин`, 409, 'cooldown');
+  const hot = cooldownUntil(player);
+  if (hot > now) {
+    const left = Math.ceil((hot - now) / 1000);
+    throw new GameError(`Ствол ещё горячий: ${left < 60 ? `${left} с` : `${Math.ceil(left / 60)} мин`}`, 409, 'cooldown');
   }
 
   // У контракта свой список отработанных вариантов, у каждого объявления розыска —
@@ -597,7 +679,7 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
 
   player.ammo -= 1;
   player.ammoRegenAt = Math.max(player.ammoRegenAt, player.ammo >= state.config.ammoMax ? now : player.ammoRegenAt);
-  player.cooldownUntil = now + state.config.shotCooldownSeconds * 1000;
+  player.lastShotAt = now;
 
   const entry = { at: now, targetName: victim.name, points: 0 };
   let outcome;
@@ -623,10 +705,11 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
       outcome = { result: 'miss', points: -penalty };
     }
 
+    logShot(player, victim, entry, true);
     player.log.unshift(entry);
     if (player.log.length > 50) player.log.length = 50;
     save();
-    return { ...outcome, cooldownUntil: player.cooldownUntil, ammo: player.ammo };
+    return { ...outcome, cooldownUntil: cooldownUntil(player), ammo: player.ammo };
   }
 
   if (victim.id !== player.targetId) {
@@ -704,10 +787,11 @@ export function shoot(player, targetPlayerId, { bounty = false } = {}) {
     };
   }
 
+  logShot(player, victim, entry, false);
   player.log.unshift(entry);
   if (player.log.length > 50) player.log.length = 50;
   save();
-  return { ...outcome, cooldownUntil: player.cooldownUntil, ammo: player.ammo };
+  return { ...outcome, cooldownUntil: cooldownUntil(player), ammo: player.ammo };
 }
 
 // --- Защита ------------------------------------------------------------------
@@ -1056,7 +1140,7 @@ export function playerView(player) {
         : null,
       ammo: player.ammo,
       nextAmmoAt: player.ammo >= state.config.ammoMax ? null : player.ammoRegenAt + regenMs,
-      cooldownUntil: player.cooldownUntil,
+      cooldownUntil: cooldownUntil(player),
       target: target ? { nickname: target.nickname } : null,
       hints: player.hints,
       hintsLeft: Math.max(0, (player.hintOrder?.length ?? 0) - player.hints.length),
@@ -1162,6 +1246,8 @@ export function adminView() {
       .slice()
       .reverse()
       .map((c) => ({ ...c, used: c.usedBy.length })),
+    // Журнал выстрелов — за весь вечер, включая прошлые раунды.
+    shotLog: state.shotLog.slice(0, 150),
     events: state.events.slice(0, 60),
   };
 }

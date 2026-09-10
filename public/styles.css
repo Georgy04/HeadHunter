@@ -127,6 +127,15 @@ html, body {
   background: linear-gradient(180deg, #ffa03c, var(--accent) 55%, #e2620d);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
 }
+/* Конец вечера — единственная кнопка, после которой игра для всех замолкает.
+   Красный, чтобы её не нажали в поисках паузы, и не оранжевый, чтобы не спутать
+   со «Старт». */
+.btn.stop {
+  color: #fff2e8;
+  border-color: #7a1a12;
+  background: linear-gradient(180deg, #d8452c, #a3231a 60%, #86160f);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
 .btn.ghost { background: transparent; border-color: var(--line-soft); color: var(--muted); }
 .btn.big { width: 100%; padding: 16px; font-size: 16px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }

@@ -58,6 +58,26 @@ if (!configBlock) {
   }
 }
 
+// --- Боевые настройки в тесте совпадают с DEFAULT_CONFIG -------------------
+
+// Смоук-тест разгоняет игру до секунд, а в конце возвращает боевые значения:
+// сброс игры настройки сохраняет, и репетиционный темп иначе доживёт до
+// настоящего вечера. Список в тесте отдельный, поэтому сверяем его с кодом —
+// забытый в нём параметр и есть та самая тихая поломка.
+const smokeSource = read('scripts/smoke.mjs');
+const battleBlock = smokeSource.match(/BATTLE_CONFIG = \{([\s\S]*?)\n\};/);
+if (!battleBlock) {
+  fail('не удалось найти BATTLE_CONFIG в scripts/smoke.mjs');
+} else if (configBlock) {
+  const battle = new Map([...battleBlock[1].matchAll(/^\s{2}(\w+): (.+?),\s*$/gm)].map(([, k, v]) => [k, v]));
+  for (const [, key, value] of configBlock[1].matchAll(/^\s{2}(\w+): (.+?),\s*$/gm)) {
+    // Текстовые настройки — название игры и Wi-Fi — у каждой площадки свои.
+    if (/^'/.test(value)) continue;
+    if (!battle.has(key)) fail(`BATTLE_CONFIG в smoke.mjs не возвращает настройку ${key}`);
+    else if (battle.get(key) !== value) fail(`BATTLE_CONFIG: ${key} = ${battle.get(key)}, в коде ${value}`);
+  }
+}
+
 // --- Ссылки между документами ведут в существующие файлы -------------------
 
 const markdownFiles = [];

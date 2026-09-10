@@ -48,6 +48,24 @@ await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, adm
 // механику проверять надо при любом балансе. Штраф здесь ненулевой намеренно —
 // иначе проверять его нечем; нулевой штраф по умолчанию сверяет check-docs.
 const POINTS = { hitPoints: 1000, missPenalty: 300, defensePoints: 2000, bountyPoints: 2000 };
+// Настройки, с которыми ведущий начинает вечер, — те же, что в DEFAULT_CONFIG
+// (совпадение сторожит check-docs). Тест их крутит, а в конце возвращает и
+// проверяет: сброс игры настройки сохраняет, и репетиционный темп иначе доживёт
+// до настоящей игры.
+const BATTLE_CONFIG = {
+  hitPoints: 1000,
+  missPenalty: 0,
+  defensePoints: 2000,
+  bountyPoints: 2000,
+  bountyLeadPoints: 1000,
+  bountyHoldMinutes: 20,
+  bountyPauseMinutes: 60,
+  ammoStart: 0,
+  ammoMax: 3,
+  ammoRegenMinutes: 60,
+  shotCooldownSeconds: 120,
+  notifyVictimOnMiss: true,
+};
 await call('/api/admin/config', {
   method: 'PATCH',
   body: { shotCooldownSeconds: 0, ammoStart: 6, ammoMax: 6, ...POINTS },
@@ -426,15 +444,28 @@ check('жертва получила уведомление о попадани�
 check('жертва осталась в игре со своим контрактом', Boolean(victimAfter.data.me.target));
 
 // 9. Кулдаун и патроны
-await call('/api/admin/config', { method: 'PATCH', body: { shotCooldownSeconds: 600 }, admin });
 await sleep(300);
 raw = await readState();
 const scoreAfterHit = hit.data.state.me.score;
 const freshTarget = byToken(tokens[0]).targetId;
 const someone = everyone().find((p) => p.id !== me.id && p.id !== freshTarget);
 await call('/api/shoot', { method: 'POST', body: { playerId: someone.id }, token: tokens[0] });
+
+// Кулдаун считается от времени выстрела, а не запоминается меткой «свободен с
+// такого-то часа». Поэтому поднятая настройка достаёт и того, кто уже отстрелялся,
+// а сокращённая освобождает его сразу: ведущий крутит темп по ходу вечера и ждать
+// смены раунда не должен.
+await call('/api/admin/config', { method: 'PATCH', body: { shotCooldownSeconds: 600 }, admin });
 const hot = await call('/api/shoot', { method: 'POST', body: { playerId: freshTarget }, token: tokens[0] });
 check('кулдаун между выстрелами работает', hot.data.code === 'cooldown', JSON.stringify(hot.data));
+
+await call('/api/admin/config', { method: 'PATCH', body: { shotCooldownSeconds: 1 }, admin });
+const cooled = await call('/api/me', { token: tokens[0] });
+check(
+  'правка кулдауна сразу действует на уже стрелявших',
+  cooled.data.me.cooldownUntil - Date.now() < 2000,
+  `осталось ${cooled.data.me.cooldownUntil - Date.now()} мс`
+);
 
 await call('/api/admin/config', { method: 'PATCH', body: { shotCooldownSeconds: 0, ammoMax: 6 }, admin });
 
@@ -469,6 +500,14 @@ check(
   `codes ${adminState.data.codes.length}, ожидалось ${poolCodes + 6}`
 );
 check('лента событий содержит сработавшую защиту', adminState.data.events.some((e) => e.type === 'blocked'));
+check(
+  'ведущий видит журнал выстрелов с именами и результатом',
+  adminState.data.shotLog.length > 0 &&
+    adminState.data.shotLog.every((s) => s.shooter && s.victim && s.result && typeof s.round === 'number') &&
+    adminState.data.shotLog.some((s) => s.result === 'hit') &&
+    adminState.data.shotLog.some((s) => s.result === 'blocked'),
+  JSON.stringify(adminState.data.shotLog.slice(0, 3))
+);
 check('лента событий содержит постановку защиты', adminState.data.events.some((e) => e.type === 'guard_set'));
 check(
   'ведущий видит, кого игрок ждёт',
@@ -643,6 +682,18 @@ await sleep(300);
 
 const [leader, runnerUp, watcher, marked] = crew;
 const wantedOf = async (who) => (await call('/api/me', { token: who.token })).data.wanted;
+
+// Розыск требует заметного отрыва: лидерство на одно попадание — это ещё не
+// лидерство, и объявление скакало бы за каждым выстрелом на площадке.
+await call('/api/admin/config', { method: 'PATCH', body: { bountyLeadPoints: 1000 }, admin });
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 1000 }, admin });
+check('отрыв ровно на пороге розыска не объявляет', (await wantedOf(watcher)) === null, JSON.stringify(await wantedOf(watcher)));
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 1 }, admin });
+check('отрыв больше порога объявляет розыск', (await wantedOf(watcher))?.nickname === leader.nickname);
+// Возвращаем табло к нулям и порог к нулю: дальше очки крутятся мелкими шагами,
+// чтобы проверять удержание и возврат объявления, а не арифметику порога.
+await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: -1001 }, admin });
+await call('/api/admin/config', { method: 'PATCH', body: { bountyLeadPoints: 0 }, admin });
 
 // Ничья наверху табло розыска не даёт: игра не выбирает жребием.
 await call(`/api/admin/player/${leader.id}/score`, { method: 'POST', body: { delta: 12 }, admin });
@@ -821,9 +872,11 @@ await sleep(300);
 raw = await readState();
 const beforeRound = Object.fromEntries(crew.map((c) => [c.id, { ...byToken(c.token) }]));
 
-await call('/api/admin/game/finish', { method: 'POST', admin });
-const roundTwo = await call('/api/admin/game/start', { method: 'POST', admin });
+// Смена раунда — одно действие: ведущему не нужно знать, что новый раунд
+// прячется за «Финалом» и следующим «Стартом».
+const roundTwo = await call('/api/admin/game/round', { method: 'POST', admin });
 check('новый раунд получил свой номер', roundTwo.data.game.round === 2, JSON.stringify(roundTwo.data.game));
+check('смена раунда сразу возвращает игру в бой', roundTwo.data.game.status === 'running', roundTwo.data.game.status);
 
 await sleep(300);
 raw = await readState();
@@ -844,7 +897,19 @@ check(
 );
 check('заметки блокнота пережили смену раунда', byToken(watcher.token).notes[marked.id] === 'алый круг');
 check('салун очищен: прежние ники в нём теперь чужие', raw.chat.length === 0, JSON.stringify(raw.chat));
-check('журналы выстрелов очищены', crew.every((c) => byToken(c.token).log.length === 0));
+check('личные журналы выстрелов очищены', crew.every((c) => byToken(c.token).log.length === 0));
+// А журнал ведущего — наоборот: в нём настоящие имена и номер раунда, поэтому
+// перетасовка его не портит, и нужен он за весь вечер.
+check(
+  'журнал ведущего пережил смену раунда',
+  raw.shotLog.length > 0 && raw.shotLog.some((s) => s.round === 1),
+  JSON.stringify(raw.shotLog.slice(0, 3))
+);
+check(
+  'в журнале ведущего настоящие имена, а не никнеймы',
+  raw.shotLog.every((s) => !CREW.some(([, nickname]) => s.shooter === nickname || s.victim === nickname)),
+  JSON.stringify(raw.shotLog.slice(0, 3))
+);
 check('ставки защиты сняты', crew.every((c) => byToken(c.token).guardAgainst === null));
 // Пауза после награды раунд не переживает, а объявление пересобирается заново —
 // и обязательно с новым никнеймом лидера, иначе розыск указывал бы на чужого.
@@ -936,21 +1001,49 @@ check(
   JSON.stringify(raw.chat)
 );
 
+// Контракты раздаются кругом, а не каждому по отдельности: иначе на площадке
+// заводится игрок, за которым не идёт никто, и он проводит остаток раунда в
+// безопасности, ничего об этом не зная.
+const inPlay = Object.values(raw.players).filter((p) => p.slotId);
+const hunters = new Map(inPlay.map((p) => [p.id, 0]));
+inPlay.forEach((p) => hunters.set(p.targetId, (hunters.get(p.targetId) ?? 0) + 1));
+check(
+  'после перераздачи у каждого ровно один охотник и одна цель',
+  inPlay.every((p) => p.targetId && p.targetId !== p.id && hunters.get(p.id) === 1),
+  JSON.stringify([...hunters.values()])
+);
+
+// «Завершить вечер» — стоп-кран, а не сброс: игра замолкает для всех, розыск
+// снимается, но случайное нажатие лечится «Продолжить» — раунд идёт дальше с
+// теми же никнеймами, очками и контрактами.
+const nicksBeforeFinish = crew.map((c) => byToken(c.token).nickname);
+await call('/api/admin/game/finish', { method: 'POST', admin });
+const shotAfterFinish = await call('/api/shoot', { method: 'POST', body: { playerId: marked.id }, token: watcher.token });
+check('после конца вечера стрелять нельзя', shotAfterFinish.data.code === 'not_running', JSON.stringify(shotAfterFinish.data));
+const chatAfterFinish = await call('/api/chat', { method: 'POST', body: { text: 'а поговорить?' }, token: watcher.token });
+check('после конца вечера салун закрыт', chatAfterFinish.data.code === 'not_running', JSON.stringify(chatAfterFinish.data));
+check('с концом вечера розыск снят', (await call('/api/admin/state', { admin })).data.wanted === null);
+
+await call('/api/admin/game/resume', { method: 'POST', admin });
+await sleep(300);
+raw = await readState();
+check(
+  '«Продолжить» возвращает тот же раунд, а не начинает новый',
+  raw.game.status === 'running' &&
+    raw.game.round === 2 &&
+    JSON.stringify(crew.map((c) => byToken(c.token).nickname)) === JSON.stringify(nicksBeforeFinish),
+  JSON.stringify({ status: raw.game.status, round: raw.game.round })
+);
+
 // Тест крутил темп игры и наплодил игроков — возвращаем сервер в исходное состояние.
-await call('/api/admin/config', {
-  method: 'PATCH',
-  body: {
-    shotCooldownSeconds: 120,
-    ammoStart: 0,
-    ammoMax: 3,
-    bountyHoldMinutes: 20,
-    hitPoints: 1000,
-    missPenalty: 0,
-    defensePoints: 2000,
-    bountyPoints: 2000,
-  },
-  admin,
-});
+await call('/api/admin/config', { method: 'PATCH', body: BATTLE_CONFIG, admin });
+// И убеждаемся, что вернули: сброс игры настройки сохраняет намеренно, поэтому
+// репетиционный темп — патрон раз в минуту — пережил бы и его, и дожил бы до
+// настоящего вечера. Такую поломку никто не заметит, пока не станет поздно.
+await sleep(300);
+raw = await readState();
+const drift = Object.entries(BATTLE_CONFIG).filter(([key, value]) => raw.config[key] !== value);
+check('после тестов в конфиге боевые настройки', drift.length === 0, JSON.stringify(drift));
 await call('/api/admin/reset', { method: 'POST', body: { confirm: 'RESET' }, admin });
 
 // Читаем файл сразу, без паузы: сброс должен лежать на диске к моменту ответа.
